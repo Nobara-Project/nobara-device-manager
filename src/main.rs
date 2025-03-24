@@ -1,14 +1,14 @@
 mod config;
 
-use std::env;
 use adw::prelude::*;
 use adw::*;
 use gdk::Display;
 /// Use all gtk4 libraries (gtk4 -> gtk because cargo)
 /// Use all libadwaita libraries (libadwaita -> adw because cargo)
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
+use std::env;
 
-use config::{APP_ID};
+use config::APP_ID;
 
 // application crates
 mod build_ui;
@@ -26,10 +26,7 @@ fn main() {
         None => panic!("$LANG is not set"),
     };
     rust_i18n::set_locale(current_locale.strip_suffix(".UTF-8").unwrap());
-    let application = adw::Application::new(
-        Some(APP_ID),
-        Default::default(),
-    );
+    let application = adw::Application::new(Some(APP_ID), Default::default());
     application.connect_startup(|app| {
         // The CSS "magic" happens here.
         let provider = CssProvider::new();
@@ -44,5 +41,5 @@ fn main() {
         app.connect_activate(build_ui);
     });
 
-   application.run();
+    application.run();
 }
