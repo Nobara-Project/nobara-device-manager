@@ -77,7 +77,7 @@ fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
         #[strong]
         window_banner,
         move |state: bool| {
-            window_banner.set_text(t!("banner_text_no_internet"));
+            window_banner.set_title(&t!("banner_text_no_internet"));
             window_banner.set_revealed(!state);
         }
     );
