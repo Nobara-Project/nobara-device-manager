@@ -65,6 +65,8 @@ fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
         &window_breakpoint,
     )));
 
+    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar()));
+
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
         "collapsed",
@@ -87,7 +89,21 @@ fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
     main_content_overlay_split_view
 }
 
-fn main_content_sidebar() {}
+fn main_content_sidebar() -> adw::ToolbarView {
+    let main_content_sidebar_toolbar = ToolbarView::builder()
+        .top_bar_style(ToolbarStyle::Flat)
+        .bottom_bar_style(ToolbarStyle::Flat)
+        .build();
+
+    main_content_sidebar_toolbar.add_top_bar(
+        &HeaderBar::builder()
+            .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
+            .show_title(true)
+            .build(),
+    );
+
+    main_content_sidebar_toolbar
+}
 
 fn main_content_content(
     window: &adw::ApplicationWindow,
