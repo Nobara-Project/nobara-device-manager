@@ -1,10 +1,18 @@
+use std::collections::HashMap;
 use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
 use adw::prelude::*;
 use adw::*;
 use gtk::glib::{clone, MainContext};
 use gtk::Orientation::Vertical;
 use std::process::Command;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use gtk::Orientation;
+use libcfhdb::pci::CfhdbPciDevice;
+use libcfhdb::usb::CfhdbUsbDevice;
+use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
+use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
+use crate::ChannelMsg;
 
 pub fn build_ui(app: &adw::Application) {
     // setup glib
@@ -37,13 +45,123 @@ pub fn build_ui(app: &adw::Application) {
         std::process::exit(0);
     });
 
-    window.set_content(Some(&main_content(&window)));
+    loading_content(&window);
 
     // show the window
     window.present()
 }
 
-fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
+fn loading_content(window: &ApplicationWindow) {
+    let (status_sender, status_receiver) = async_channel::unbounded::<ChannelMsg>();
+    let device_maps = Arc::new((Mutex::new(None::<HashMap<String, CfhdbPciDevice>>), Mutex::new(None::<HashMap<String, CfhdbUsbDevice>>)));
+    let loading_box = gtk::Box::builder()
+        .orientation(Orientation::Vertical)
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .margin_end(20)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    let window_headerbar = HeaderBar::builder()
+        .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
+        .build();
+    let window_toolbar = ToolbarView::builder()
+        .content(&loading_box)
+        .top_bar_style(ToolbarStyle::Flat)
+        .bottom_bar_style(ToolbarStyle::Flat)
+        .build();
+
+    let loading_icon = gtk::Image::builder()
+        .icon_name(APP_ICON)
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .vexpand(true)
+        .hexpand(true)
+        .margin_end(20)
+        .pixel_size(256)
+        .build();
+
+    let loading_spinner = adw::Spinner::builder()
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .width_request(120)
+        .height_request(120)
+        .margin_end(20)
+        .build();
+
+    let loading_label = gtk::Label::builder()
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .vexpand(true)
+        .hexpand(true)
+        .margin_end(20)
+        .build();
+
+    let main_context = MainContext::default();
+
+    main_context.spawn_local(clone!(#[weak] window, #[weak] loading_label, async move {
+        while let Ok(state) = status_receiver.recv().await {
+            match state {
+                ChannelMsg::OutputLine(output_str) => {
+                    loading_label.set_label(&output_str);
+                }
+                ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb) => {
+                    window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb)));
+                }
+                ChannelMsg::FailMsg => {
+
+                },
+            }
+        }
+    }));
+
+    load_cfhdb(status_sender);
+
+    window_toolbar.add_top_bar(&window_headerbar);
+    loading_box.append(&loading_icon);
+    loading_box.append(&loading_spinner);
+    loading_box.append(&loading_label);
+
+    window.set_content(Some(&window_toolbar));
+}
+
+fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
+    std::thread::spawn(move || {
+        let pci_profiles = match get_pci_profiles_from_url(&status_sender) {
+            Ok(t) => t,
+            Err(e) => {
+                status_sender.send_blocking(ChannelMsg::OutputLine(e.to_string())).expect("Channel closed");
+                status_sender.send_blocking(ChannelMsg::FailMsg).expect("Channel closed");
+                panic!();
+            }
+        };
+        let usb_profiles = match get_usb_profiles_from_url(&status_sender) {
+            Ok(t) => t,
+            Err(e) => {
+                status_sender.send_blocking(ChannelMsg::OutputLine(e.to_string())).expect("Channel closed");
+                status_sender.send_blocking(ChannelMsg::FailMsg).expect("Channel closed");
+                panic!();
+            }
+        };
+        match (get_pci_devices(&pci_profiles), get_usb_devices(&usb_profiles)) {
+            (Some(a), Some(b)) => {
+                status_sender.send_blocking(ChannelMsg::SuccessMsgDeviceFetch(a,b)).expect("Channel closed");
+            }
+            (_,_) => {
+                status_sender.send_blocking(ChannelMsg::FailMsg).expect("Channel closed");
+                panic!();
+            }
+        }
+    });
+}
+
+fn main_content(window: &adw::ApplicationWindow, hashmap_pci: HashMap<String, Vec<CfhdbPciDevice>>, hashmap_usb:HashMap<String, Vec<CfhdbUsbDevice>>) -> adw::OverlaySplitView {
+    dbg!(hashmap_pci);
+    dbg!(hashmap_usb);
     let window_breakpoint = adw::Breakpoint::new(BreakpointCondition::new_length(
         BreakpointConditionLengthType::MaxWidth,
         900.0,
@@ -65,7 +183,32 @@ fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
         &window_breakpoint,
     )));
 
-    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar()));
+    // Temp
+    let stack = gtk::Stack::new();
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    stack.add_titled(&gtk::Label::new(Some("test0")), Some("test0_pci"), "test0_pci");
+    stack.add_titled(&gtk::Label::new(Some("test1")), Some("test1_pci"), "test1_pci");
+    stack.add_titled(&gtk::Label::new(Some("test2")), Some("test2_pci"), "test2_pci");
+    //
+
+    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(&stack)));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
@@ -89,8 +232,19 @@ fn main_content(window: &adw::ApplicationWindow) -> adw::OverlaySplitView {
     main_content_overlay_split_view
 }
 
-fn main_content_sidebar() -> adw::ToolbarView {
+fn main_content_sidebar(stack: &gtk::Stack) -> adw::ToolbarView {
+    let main_content_sidebar_box = gtk::Box::builder()
+        .orientation(Orientation::Vertical)
+        .build();
+
+    let main_content_sidebar_scrolled_window = gtk::ScrolledWindow::builder()
+        .child(&main_content_sidebar_box)
+        .propagate_natural_height(true)
+        .propagate_natural_width(true)
+        .build();
+
     let main_content_sidebar_toolbar = ToolbarView::builder()
+        .content(&main_content_sidebar_scrolled_window)
         .top_bar_style(ToolbarStyle::Flat)
         .bottom_bar_style(ToolbarStyle::Flat)
         .build();
@@ -101,6 +255,16 @@ fn main_content_sidebar() -> adw::ToolbarView {
             .show_title(true)
             .build(),
     );
+
+    // Temp
+    let stack_sidebar = gtk::StackSidebar::builder()
+        .stack(&stack)
+        .hexpand(true)
+        .vexpand(true)
+        .build();
+    //
+
+    main_content_sidebar_box.append(&stack_sidebar);
 
     main_content_sidebar_toolbar
 }

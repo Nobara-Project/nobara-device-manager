@@ -1,5 +1,6 @@
 mod config;
 
+use std::collections::HashMap;
 use adw::prelude::*;
 use adw::*;
 use gdk::Display;
@@ -7,11 +8,21 @@ use gdk::Display;
 /// Use all libadwaita libraries (libadwaita -> adw because cargo)
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use std::env;
+use libcfhdb::pci::CfhdbPciDevice;
+use libcfhdb::usb::CfhdbUsbDevice;
 
 use config::APP_ID;
 
+pub enum ChannelMsg {
+    OutputLine(String),
+    SuccessMsgDeviceFetch(HashMap<String, Vec<CfhdbPciDevice>>, HashMap<String, Vec<CfhdbUsbDevice>>),
+    FailMsg,
+}
+
 // application crates
 mod build_ui;
+mod cfhdb;
+
 use crate::build_ui::build_ui;
 
 // Init translations for current crate.
