@@ -1,21 +1,24 @@
 mod config;
 
-use std::collections::HashMap;
 use adw::prelude::*;
 use adw::*;
 use gdk::Display;
 /// Use all gtk4 libraries (gtk4 -> gtk because cargo)
 /// Use all libadwaita libraries (libadwaita -> adw because cargo)
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
-use std::env;
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
+use std::collections::HashMap;
+use std::env;
 
 use config::APP_ID;
 
 pub enum ChannelMsg {
     OutputLine(String),
-    SuccessMsgDeviceFetch(HashMap<String, Vec<CfhdbPciDevice>>, HashMap<String, Vec<CfhdbUsbDevice>>),
+    SuccessMsgDeviceFetch(
+        HashMap<String, Vec<CfhdbPciDevice>>,
+        HashMap<String, Vec<CfhdbUsbDevice>>,
+    ),
     FailMsg,
 }
 

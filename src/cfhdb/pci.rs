@@ -1,12 +1,14 @@
 use crate::config::*;
+use crate::ChannelMsg;
 use libcfhdb::pci::*;
 use std::{
     collections::HashMap, fs, io::Write, ops::Deref, os::unix::fs::PermissionsExt, path::Path,
     process::exit,
 };
-use crate::ChannelMsg;
 
-pub fn get_pci_devices(profiles: &Vec<CfhdbPciProfile>) -> Option<HashMap<String, Vec<CfhdbPciDevice>>> {
+pub fn get_pci_devices(
+    profiles: &Vec<CfhdbPciProfile>,
+) -> Option<HashMap<String, Vec<CfhdbPciDevice>>> {
     match CfhdbPciDevice::get_devices() {
         Some(devices) => {
             for i in &devices {
@@ -15,51 +17,63 @@ pub fn get_pci_devices(profiles: &Vec<CfhdbPciProfile>) -> Option<HashMap<String
             let hashmap = CfhdbPciDevice::create_class_hashmap(devices);
             return Some(hashmap);
         }
-        None => return None
+        None => return None,
     }
 }
-pub fn get_pci_profiles_from_url(sender: &async_channel::Sender<ChannelMsg>) -> Result<Vec<CfhdbPciProfile>, std::io::Error> {
+pub fn get_pci_profiles_from_url(
+    sender: &async_channel::Sender<ChannelMsg>,
+) -> Result<Vec<CfhdbPciProfile>, std::io::Error> {
     let cached_db_path = Path::new("/var/cache/cfhdb/pci.json");
-    sender.send_blocking(ChannelMsg::OutputLine(format!(
-        "[{}] {}",
-        t!("info"),
-        t!("pci_download_starting")
-    ))).expect("Channel closed");
+    sender
+        .send_blocking(ChannelMsg::OutputLine(format!(
+            "[{}] {}",
+            t!("info"),
+            t!("pci_download_starting")
+        )))
+        .expect("Channel closed");
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap();
     let data = match client.get(PCI_PROFILE_JSON_URL).send() {
         Ok(t) => {
-            sender.send_blocking(ChannelMsg::OutputLine(format!(
-                "[{}] {}",
-                t!("info"),
-                t!("pci_download_successful")
-            ))).expect("Channel closed");
+            sender
+                .send_blocking(ChannelMsg::OutputLine(format!(
+                    "[{}] {}",
+                    t!("info"),
+                    t!("pci_download_successful")
+                )))
+                .expect("Channel closed");
             let cache = t.text().unwrap();
             let _ = fs::File::create(cached_db_path);
             let _ = fs::write(cached_db_path, &cache);
             cache
         }
         Err(_) => {
-            sender.send_blocking(ChannelMsg::OutputLine(format!(
-                "[{}] {}",
-                t!("warn"),
-                t!("pci_download_failed")
-            ))).expect("Channel closed");
-            if cached_db_path.exists() {
-                sender.send_blocking(ChannelMsg::OutputLine(format!(
+            sender
+                .send_blocking(ChannelMsg::OutputLine(format!(
                     "[{}] {}",
-                    t!("info"),
-                    t!("pci_download_cache_found")
-                ))).expect("Channel closed");
+                    t!("warn"),
+                    t!("pci_download_failed")
+                )))
+                .expect("Channel closed");
+            if cached_db_path.exists() {
+                sender
+                    .send_blocking(ChannelMsg::OutputLine(format!(
+                        "[{}] {}",
+                        t!("info"),
+                        t!("pci_download_cache_found")
+                    )))
+                    .expect("Channel closed");
                 fs::read_to_string(cached_db_path).unwrap()
             } else {
-                sender.send_blocking(ChannelMsg::OutputLine(format!(
-                    "[{}] {}",
-                    t!("error"),
-                    t!("pci_download_cache_not_found")
-                ))).expect("Channel closed");
+                sender
+                    .send_blocking(ChannelMsg::OutputLine(format!(
+                        "[{}] {}",
+                        t!("error"),
+                        t!("pci_download_cache_not_found")
+                    )))
+                    .expect("Channel closed");
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     t!("pci_download_cache_not_found"),
