@@ -1,6 +1,8 @@
-mod loading;
+mod colored_circle;
 mod content;
+mod loading;
 
+use crate::build_ui::loading::loading_content;
 use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
 use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
 use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
@@ -10,14 +12,16 @@ use adw::*;
 use gtk::ffi::GtkWidget;
 use gtk::glib::{clone, MainContext};
 use gtk::Orientation::Vertical;
-use gtk::{Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType, ToggleButton, Widget};
+use gtk::{
+    Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
+    ToggleButton, Widget,
+};
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use crate::build_ui::loading::loading_content;
 
 pub fn build_ui(app: &adw::Application) {
     // setup glib

@@ -7,13 +7,18 @@ use adw::*;
 use gtk::ffi::GtkWidget;
 use gtk::glib::{clone, MainContext};
 use gtk::Orientation::Vertical;
-use gtk::{Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType, ToggleButton, Widget};
+use gtk::{
+    Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
+    ToggleButton, Widget,
+};
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+use super::colored_circle;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
@@ -53,7 +58,7 @@ pub fn main_content(
 
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
-        let class_i18n =  t!(class).to_string();
+        let class_i18n = t!(class).to_string();
         window_stack.add_titled(
             &create_pci_class(&devices, &class_i18n),
             Some(&class),
@@ -256,8 +261,8 @@ fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::Heade
     ));
 }
 fn internet_check_loop<F>(closure: F)
-    where
-        F: FnOnce(bool) + 'static + Clone, // Closure takes `rx` as an argument
+where
+    F: FnOnce(bool) + 'static + Clone, // Closure takes `rx` as an argument
 {
     let (sender, receiver) = async_channel::unbounded();
 
@@ -312,14 +317,18 @@ fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindo
     let devices_navigation_page_toolbar = adw::ToolbarView::builder()
         .content(&devices_list_row)
         .build();
-    devices_navigation_page_toolbar.add_top_bar(&adw::HeaderBar::builder().show_end_title_buttons(false).show_start_title_buttons(false).build());
+    devices_navigation_page_toolbar.add_top_bar(
+        &adw::HeaderBar::builder()
+            .show_end_title_buttons(false)
+            .show_start_title_buttons(false)
+            .build(),
+    );
     let devices_navigation_page = adw::NavigationPage::builder()
         .title(class)
         .child(&devices_navigation_page_toolbar)
         .build();
     //
-    let navigation_view = adw::NavigationView::builder()
-        .build();
+    let navigation_view = adw::NavigationView::builder().build();
     navigation_view.add(&devices_navigation_page);
     let scroll = gtk::ScrolledWindow::builder()
         .max_content_width(650)
@@ -330,9 +339,13 @@ fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindo
     //
     for device in devices {
         let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
-        let device_navigation_page_toolbar = adw::ToolbarView::builder()
-            .build();
-        device_navigation_page_toolbar.add_top_bar(&adw::HeaderBar::builder().show_end_title_buttons(false).show_start_title_buttons(false).build());
+        let device_navigation_page_toolbar = adw::ToolbarView::builder().build();
+        device_navigation_page_toolbar.add_top_bar(
+            &adw::HeaderBar::builder()
+                .show_end_title_buttons(false)
+                .show_start_title_buttons(false)
+                .build(),
+        );
         let device_navigation_page = adw::NavigationPage::builder()
             .title(&device_title)
             .child(&device_navigation_page_toolbar)
@@ -343,9 +356,21 @@ fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindo
             .subtitle(&device.sysfs_busid)
             .activatable(true)
             .build();
-        action_row.connect_activated(clone!(#[weak] navigation_view, #[weak] device_navigation_page, move |_| {
-            navigation_view.push(&device_navigation_page);
-        }));
+        action_row.connect_activated(clone!(
+            #[weak]
+            navigation_view,
+            #[weak]
+            device_navigation_page,
+            move |_| {
+                navigation_view.push(&device_navigation_page);
+            }
+        ));
+        let flatpak_transaction_dialog_progress_bar = colored_circle::ColoredCircle::new();
+        //flatpak_transaction_dialog_progress_bar.set_hexpand(true);
+        //flatpak_transaction_dialog_progress_bar.set_vexpand(true);
+        flatpak_transaction_dialog_progress_bar.set_width_request(15);
+        flatpak_transaction_dialog_progress_bar.set_height_request(15);
+        action_row.add_suffix(&flatpak_transaction_dialog_progress_bar);
         devices_list_row.append(&action_row);
     }
     scroll
