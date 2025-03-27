@@ -4,16 +4,16 @@ use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
 use crate::ChannelMsg;
 use adw::prelude::*;
 use adw::*;
+use gtk::ffi::GtkWidget;
 use gtk::glib::{clone, MainContext};
-use gtk::{Align, Orientation, PolicyType, Stack, StackTransitionType, ToggleButton, Widget};
 use gtk::Orientation::Vertical;
+use gtk::{Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType, ToggleButton, Widget};
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use std::collections::HashMap;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use gtk::ffi::GtkWidget;
 
 pub fn build_ui(app: &adw::Application) {
     // setup glib
@@ -221,7 +221,7 @@ fn main_content(
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         window_stack.add_titled(
-            &gtk::Label::new(Some(&class)),
+            &create_pci_class(&devices),
             Some(&class),
             &t!(class).to_string(),
         );
@@ -257,7 +257,11 @@ fn main_content(
         ));
     }
 
-    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(&window_stack, &pci_buttons, &usb_buttons)));
+    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(
+        &window_stack,
+        &pci_buttons,
+        &usb_buttons,
+    )));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
@@ -281,7 +285,11 @@ fn main_content(
     main_content_overlay_split_view
 }
 
-fn main_content_sidebar(stack: &gtk::Stack, pci_buttons: &Vec<ToggleButton>, usb_buttons: &Vec<ToggleButton>) -> adw::ToolbarView {
+fn main_content_sidebar(
+    stack: &gtk::Stack,
+    pci_buttons: &Vec<ToggleButton>,
+    usb_buttons: &Vec<ToggleButton>,
+) -> adw::ToolbarView {
     let main_content_sidebar_box = gtk::Box::builder()
         .orientation(Orientation::Vertical)
         .build();
@@ -462,4 +470,58 @@ where
             closure(state);
         }
     });
+}
+
+fn create_pci_class(devices: &Vec<CfhdbPciDevice>) -> ScrolledWindow {
+    let devices_list_row = gtk::ListBox::builder()
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .margin_end(20)
+        .selection_mode(SelectionMode::Browse)
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+    devices_list_row.add_css_class("boxed-list");
+    //
+    let devices_navigation_page_toolbar = adw::ToolbarView::builder()
+        .content(&devices_list_row)
+        .build();
+    devices_navigation_page_toolbar.add_top_bar(&adw::HeaderBar::builder().show_end_title_buttons(false).show_start_title_buttons(false).build());
+    let devices_navigation_page = adw::NavigationPage::builder()
+        .title("PCI_TEST0")
+        .child(&devices_navigation_page_toolbar)
+        .build();
+    //
+    let navigation_view = adw::NavigationView::builder()
+        .build();
+    navigation_view.add(&devices_navigation_page);
+    let scroll = gtk::ScrolledWindow::builder()
+        .max_content_width(650)
+        .min_content_width(300)
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .child(&navigation_view)
+        .build();
+    //
+    for device in devices {
+        let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
+        let device_navigation_page_toolbar = adw::ToolbarView::builder()
+            .build();
+        device_navigation_page_toolbar.add_top_bar(&adw::HeaderBar::builder().show_end_title_buttons(false).show_start_title_buttons(false).build());
+        let device_navigation_page = adw::NavigationPage::builder()
+            .title(&device_title)
+            .child(&device_navigation_page_toolbar)
+            .build();
+        navigation_view.add(&device_navigation_page);
+        let action_row = adw::ActionRow::builder()
+            .title(&device_title)
+            .subtitle(&device.sysfs_busid)
+            .activatable(true)
+            .build();
+        action_row.connect_activated(clone!(#[weak] navigation_view, #[weak] device_navigation_page, move |_| {
+            navigation_view.push(&device_navigation_page);
+        }));
+        devices_list_row.append(&action_row);
+    }
+    scroll
 }
