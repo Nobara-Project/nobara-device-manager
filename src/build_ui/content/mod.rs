@@ -478,6 +478,36 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     driver_color_badge.set_theme_changed_action(theme_changed_action);
 
     color_badges_vec.push(&driver_color_badge);
+
+    let sysfs_busid_color_badge = ColorBadge::new();
+    sysfs_busid_color_badge.set_label0(textwrap::fill("TEST_SYSFS_BUSID", 15));
+    sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 15));
+    sysfs_busid_color_badge.set_css_style("background-accent-bg");
+    sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
+    sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
+    sysfs_busid_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&sysfs_busid_color_badge);
+
+    let vendor_id_color_badge = ColorBadge::new();
+    vendor_id_color_badge.set_label0(textwrap::fill("TEST_VENDOR_ID", 15));
+    vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 15));
+    vendor_id_color_badge.set_css_style("background-accent-bg");
+    vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
+    vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
+    vendor_id_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&vendor_id_color_badge);
+
+    let device_id_color_badge = ColorBadge::new();
+    device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 15));
+    device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 15));
+    device_id_color_badge.set_css_style("background-accent-bg");
+    device_id_color_badge.set_group_size0(&color_badges_size_group0);
+    device_id_color_badge.set_group_size1(&color_badges_size_group1);
+    device_id_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&device_id_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
     let row_count = 2;
