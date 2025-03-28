@@ -442,8 +442,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     let mut color_badges_vec = vec![];
     let started_color_badge = ColorBadge::new();
     let started = device.started.unwrap_or_default();
-    started_color_badge.set_label0(textwrap::fill("TEST_STARTED", 15));
-    started_color_badge.set_label1(textwrap::fill(if started { "TEST_YES" } else { "TEST_NO" }, 15));
+    started_color_badge.set_label0(textwrap::fill("TEST_STARTED", 10));
+    started_color_badge.set_label1(textwrap::fill(if started { "TEST_YES" } else { "TEST_NO" }, 10));
     started_color_badge.set_css_style(if started {
         "background-accent-bg"
     } else {
@@ -456,8 +456,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&started_color_badge);
 
     let enabled_color_badge = ColorBadge::new();
-    enabled_color_badge.set_label0(textwrap::fill("TEST_ENABLED", 15));
-    enabled_color_badge.set_label1(textwrap::fill(if device.enabled { "TEST_YES" } else { "TEST_NO" }, 15));
+    enabled_color_badge.set_label0(textwrap::fill("TEST_ENABLED", 10));
+    enabled_color_badge.set_label1(textwrap::fill(if device.enabled { "TEST_YES" } else { "TEST_NO" }, 10));
     enabled_color_badge.set_css_style(if device.enabled {
         "background-accent-bg"
     } else {
@@ -470,8 +470,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&enabled_color_badge);
 
     let driver_color_badge = ColorBadge::new();
-    driver_color_badge.set_label0(textwrap::fill("TEST_DRIVER", 15));
-    driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 15));
+    driver_color_badge.set_label0(textwrap::fill("TEST_DRIVER", 10));
+    driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 10));
     driver_color_badge.set_css_style("background-accent-bg");
     driver_color_badge.set_group_size0(&color_badges_size_group0);
     driver_color_badge.set_group_size1(&color_badges_size_group1);
@@ -480,8 +480,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&driver_color_badge);
 
     let sysfs_busid_color_badge = ColorBadge::new();
-    sysfs_busid_color_badge.set_label0(textwrap::fill("TEST_SYSFS_BUSID", 15));
-    sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 15));
+    sysfs_busid_color_badge.set_label0(textwrap::fill("TEST_SYSFS_BUSID", 10));
+    sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 10));
     sysfs_busid_color_badge.set_css_style("background-accent-bg");
     sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
     sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
@@ -490,8 +490,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&sysfs_busid_color_badge);
 
     let vendor_id_color_badge = ColorBadge::new();
-    vendor_id_color_badge.set_label0(textwrap::fill("TEST_VENDOR_ID", 15));
-    vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 15));
+    vendor_id_color_badge.set_label0(textwrap::fill("TEST_VENDOR_ID", 10));
+    vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 10));
     vendor_id_color_badge.set_css_style("background-accent-bg");
     vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
     vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -500,8 +500,8 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&vendor_id_color_badge);
 
     let device_id_color_badge = ColorBadge::new();
-    device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 15));
-    device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 15));
+    device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 10));
+    device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 10));
     device_id_color_badge.set_css_style("background-accent-bg");
     device_id_color_badge.set_group_size0(&color_badges_size_group0);
     device_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -510,17 +510,17 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     color_badges_vec.push(&device_id_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
-    let row_count = 2;
+    let row_count = (color_badges_vec.len() / 2) as i32;
 
     for badge in color_badges_vec {
         if last_widget.0.is_none() {
             color_badges_grid.attach(badge, 0, 0, 1, 1);
-        } else if last_widget.1 == row_count {
-            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Bottom, 1, 1)
         } else if last_widget.1 > row_count {
+            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Top, 1, 1)
+        } else if last_widget.1 == row_count {
             color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Left, 1, 1)
         } else {
-            color_badges_grid   .attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Right, 1, 1)
+            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Bottom, 1, 1)
         }
 
         last_widget.0 = Some(badge);
