@@ -369,9 +369,12 @@ fn create_pci_class(
         .build();
     //
     for device in devices {
+        let device_status_indicator = colored_circle::ColoredCircle::new();
+        device_status_indicator.set_width_request(15);
+        device_status_indicator.set_height_request(15);
         let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
         let device_navigation_page_toolbar = adw::ToolbarView::builder()
-            .content(&pci_device_page(&device, &theme_changed_action))
+            .content(&pci_device_page(&device, &theme_changed_action, &device_status_indicator))
             .build();
         device_navigation_page_toolbar.add_top_bar(
             &adw::HeaderBar::builder()
@@ -398,17 +401,13 @@ fn create_pci_class(
                 navigation_view.push(&device_navigation_page);
             }
         ));
-        let device_status_indicator = colored_circle::ColoredCircle::new();
-        device_status_indicator.set_width_request(15);
-        device_status_indicator.set_height_request(15);
-        update_pci_device_status_indicator(&device_status_indicator, &device.sysfs_busid);
         action_row.add_suffix(&device_status_indicator);
         devices_list_row.append(&action_row);
     }
     scroll
 }
 
-fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAction) -> gtk::Box {
+fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAction, device_status_indicator: &ColoredCircle) -> gtk::Box {
     let content_box = gtk::Box::builder()
         .hexpand(true)
         .vexpand(true)
@@ -417,7 +416,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let color_badges_grid = gtk::Grid::builder()
         .hexpand(true)
-        .vexpand(true)
         .halign(Align::Center)
         .row_homogeneous(true)
         .column_homogeneous(true)
@@ -427,12 +425,15 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     //
     let device_controls_box = gtk::Box::builder()
-        .orientation(Orientation::Vertical)
+        .orientation(Orientation::Horizontal)
+        .valign(Align::Start)
+        .halign(Align::Center)
         .margin_start(10)
         .margin_end(10)
         .margin_bottom(20)
         .margin_top(20)
         .build();
+    device_controls_box.add_css_class("linked");
 
     //
     let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
@@ -443,12 +444,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     let started_color_badge = ColorBadge::new();
     let started = device.started.unwrap_or_default();
     started_color_badge.set_label0(textwrap::fill("TEST_STARTED", 10));
-    started_color_badge.set_label1(textwrap::fill(if started { "TEST_YES" } else { "TEST_NO" }, 10));
-    started_color_badge.set_css_style(if started {
-        "background-accent-bg"
-    } else {
-        "background-red-bg"
-    });
     started_color_badge.set_group_size0(&color_badges_size_group0);
     started_color_badge.set_group_size1(&color_badges_size_group1);
     started_color_badge.set_theme_changed_action(theme_changed_action);
@@ -457,12 +452,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let enabled_color_badge = ColorBadge::new();
     enabled_color_badge.set_label0(textwrap::fill("TEST_ENABLED", 10));
-    enabled_color_badge.set_label1(textwrap::fill(if device.enabled { "TEST_YES" } else { "TEST_NO" }, 10));
-    enabled_color_badge.set_css_style(if device.enabled {
-        "background-accent-bg"
-    } else {
-        "background-red-bg"
-    });
     enabled_color_badge.set_group_size0(&color_badges_size_group0);
     enabled_color_badge.set_group_size1(&color_badges_size_group1);
     enabled_color_badge.set_theme_changed_action(theme_changed_action);
@@ -471,7 +460,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let driver_color_badge = ColorBadge::new();
     driver_color_badge.set_label0(textwrap::fill("TEST_DRIVER", 10));
-    driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 10));
     driver_color_badge.set_css_style("background-accent-bg");
     driver_color_badge.set_group_size0(&color_badges_size_group0);
     driver_color_badge.set_group_size1(&color_badges_size_group1);
@@ -481,7 +469,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let sysfs_busid_color_badge = ColorBadge::new();
     sysfs_busid_color_badge.set_label0(textwrap::fill("TEST_SYSFS_BUSID", 10));
-    sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 10));
     sysfs_busid_color_badge.set_css_style("background-accent-bg");
     sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
     sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
@@ -491,7 +478,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let vendor_id_color_badge = ColorBadge::new();
     vendor_id_color_badge.set_label0(textwrap::fill("TEST_VENDOR_ID", 10));
-    vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 10));
     vendor_id_color_badge.set_css_style("background-accent-bg");
     vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
     vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -501,7 +487,6 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
 
     let device_id_color_badge = ColorBadge::new();
     device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 10));
-    device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 10));
     device_id_color_badge.set_css_style("background-accent-bg");
     device_id_color_badge.set_group_size0(&color_badges_size_group0);
     device_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -516,11 +501,29 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
         if last_widget.0.is_none() {
             color_badges_grid.attach(badge, 0, 0, 1, 1);
         } else if last_widget.1 > row_count {
-            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Top, 1, 1)
+            color_badges_grid.attach_next_to(
+                badge,
+                Some(last_widget.0.unwrap()),
+                gtk::PositionType::Top,
+                1,
+                1,
+            )
         } else if last_widget.1 == row_count {
-            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Left, 1, 1)
+            color_badges_grid.attach_next_to(
+                badge,
+                Some(last_widget.0.unwrap()),
+                gtk::PositionType::Left,
+                1,
+                1,
+            )
         } else {
-            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Bottom, 1, 1)
+            color_badges_grid.attach_next_to(
+                badge,
+                Some(last_widget.0.unwrap()),
+                gtk::PositionType::Bottom,
+                1,
+                1,
+            )
         }
 
         last_widget.0 = Some(badge);
@@ -528,22 +531,190 @@ fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAc
     }
     //
 
+    let control_button_start_device_button = gtk::Button::builder()
+        .child(&gtk::Image::builder().icon_name("media-playback-start-symbolic").pixel_size(32).build())
+        .width_request(48)
+        .height_request(48)
+        .tooltip_text("TEST_DEVICE_CONTROL_START")
+        .build();
+    let control_button_stop_device_button = gtk::Button::builder()
+        .child(&gtk::Image::builder().icon_name("media-playback-stop-symbolic").pixel_size(32).build())
+        .width_request(48)
+        .height_request(48)
+        .tooltip_text("TEST_DEVICE_CONTROL_STOP")
+        .build();
+    let control_button_enable_device_button = gtk::Button::builder()
+        .child(&gtk::Image::builder().icon_name("emblem-ok-symbolic").pixel_size(32).build())
+        .width_request(48)
+        .height_request(48)
+        .tooltip_text("TEST_DEVICE_CONTROL_ENABLE")
+        .build();
+    let control_button_disable_device_button = gtk::Button::builder()
+        .child(&gtk::Image::builder().icon_name("edit-clear-all-symbolic").pixel_size(32).build())
+        .width_request(48)
+        .height_request(48)
+        .tooltip_text("TEST_DEVICE_CONTROL_DISABLE")
+        .build();
+
+    let available_profiles_list_row = adw::PreferencesGroup::builder()
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .margin_end(20)
+        .title("TEST_AV_PF_TITLE")
+        .description("TEST_AV_PF_SUBTITLE")
+        .vexpand(true)
+        .hexpand(true)
+        .build();
+
+    let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
+
+    let profiles = device.available_profiles.0.lock().unwrap().clone().unwrap_or_default();
+    let mut available_profiles_list_row_widgets = vec![];
+
+    for profile in profiles {
+        let (profiles_color_badges_size_group0 , profiles_color_badges_size_group1) = (gtk::SizeGroup::new(gtk::SizeGroupMode::Both), gtk::SizeGroup::new(gtk::SizeGroupMode::Both));
+        let profile_expander_row = adw::ExpanderRow::new();
+                let profile_icon = gtk::Image::builder()
+                    .icon_name(&profile.icon_name)
+                    .pixel_size(32)
+                    .build();
+                let profile_status_icon = gtk::Image::builder()
+                    .icon_name("emblem-default")
+                    .pixel_size(24)
+                    .visible(false)
+                    .tooltip_text(t!("profile_status_icon_tooltip_text"))
+                    .build();
+                let profile_content_row = adw::ActionRow::builder().build();
+                let profile_install_button = gtk::Button::builder()
+                    .margin_start(5)
+                    .margin_top(5)
+                    .margin_bottom(5)
+                    .valign(gtk::Align::Center)
+                    .label(t!("profile_install_button_label"))
+                    .tooltip_text(t!("profile_install_button_tooltip_text"))
+                    .sensitive(false)
+                    .build();
+                profile_install_button.add_css_class("suggested-action");
+                let profile_remove_button = gtk::Button::builder()
+                    .margin_end(5)
+                    .margin_top(5)
+                    .margin_bottom(5)
+                    .valign(gtk::Align::Center)
+                    .label(t!("profile_remove_button_label"))
+                    .tooltip_text(t!("profile_remove_button_tooltip_text"))
+                    .sensitive(false)
+                    .build();
+                let profile_action_box = gtk::Box::builder().homogeneous(true).build();
+                profile_remove_button.add_css_class("destructive-action");
+                profile_expander_row.add_prefix(&profile_icon);
+                profile_expander_row.add_suffix(&profile_status_icon);
+                profile_expander_row.set_title(&profile.i18n_desc);
+                profile_expander_row.set_subtitle(&profile.codename);
+                //
+                let color_badge_experimental = ColorBadge::new();
+                color_badge_experimental.set_label0(textwrap::fill("TEST_EXPERIMENTAL", 10));
+                if profile.experimental {
+                    color_badge_experimental.set_label1("TEST_YES");
+                    color_badge_experimental.set_css_style("background-red-bg");
+                } else {
+                    color_badge_experimental.set_label1("TEST_NO");
+                    color_badge_experimental.set_css_style("background-accent-bg");
+                }
+                color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
+                color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
+                color_badge_experimental.set_theme_changed_action(theme_changed_action);
+                let color_badge_license = ColorBadge::new();
+                color_badge_license.set_label0(textwrap::fill("TEST_LICENSE", 10));
+                color_badge_license.set_label1(profile.license.clone());
+                color_badge_license.set_css_style("background-accent-bg");
+                color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
+                color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
+                color_badge_license.set_theme_changed_action(theme_changed_action);
+                let badges_warp_box = gtk::Box::new(Vertical, 3);
+                badges_warp_box.append(&color_badge_license);
+                badges_warp_box.append(&color_badge_experimental);
+                profile_content_row.add_prefix(&badges_warp_box);
+                profile_action_box.append(&profile_remove_button);
+                profile_action_box.append(&profile_install_button);
+                profile_content_row.add_suffix(&profile_action_box);
+                profile_expander_row.add_row(&profile_content_row);
+                rows_size_group.add_widget(&profile_action_box);
+                available_profiles_list_row.add(&profile_expander_row);
+            available_profiles_list_row_widgets.push(profile_expander_row);
+    }
+
+    let update_device_status = || {
+        let updated_device = CfhdbPciDevice::get_device_from_busid(&device.sysfs_busid).unwrap();
+        let (started, enabled) = (updated_device.started.unwrap_or_default(), updated_device.enabled);
+        let (color, tooltip) = match (enabled, started) {
+            (true, true) => (RGBA::GREEN, "TEST_DEVICE_ACTIVE_ENABLED"),
+            (false, true) => (RGBA::BLUE, "TEST_DEVICE_ACTIVE_DISABLED"),
+            (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), "TEST_DEVICE_STOP_ENABLED"),
+            (false, false) => (RGBA::RED, "TEST_DEVICE_STOP_DISABLED"),
+        };
+        device_status_indicator.set_color(color);
+        device_status_indicator.set_tooltip_text(Some(tooltip));
+
+        if started {
+            control_button_start_device_button.set_sensitive(false);
+        } else {
+            control_button_stop_device_button.set_sensitive(true);
+        }
+
+        if enabled {
+            control_button_enable_device_button.set_sensitive(false);
+        } else {
+            control_button_disable_device_button.set_sensitive(true);
+        }
+
+        started_color_badge.set_label1(textwrap::fill(
+            if started {
+                "TEST_YES"
+            } else {
+                "TEST_NO"
+            },
+            10,
+        ));
+        started_color_badge.set_css_style(if started {
+            "background-accent-bg"
+        } else {
+            "background-red-bg"
+        });
+        enabled_color_badge.set_label1(textwrap::fill(
+            if enabled {
+                "TEST_YES"
+            } else {
+                "TEST_NO"
+            },
+            10,
+        ));
+        enabled_color_badge.set_css_style(if enabled {
+            "background-accent-bg"
+        } else {
+            "background-red-bg"
+        });
+        driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 10));
+        sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 10));
+        vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 10));
+        device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 10));
+    };
+
+    update_device_status();
+
+    device_controls_box.append(&control_button_start_device_button);
+
+    device_controls_box.append(&control_button_stop_device_button);
+
+    device_controls_box.append(&control_button_enable_device_button);
+
+    device_controls_box.append(&control_button_disable_device_button);
+
     content_box.append(&color_badges_grid);
+    content_box.append(&device_controls_box);
+    content_box.append(&available_profiles_list_row);
 
     content_box
-}
-
-fn update_pci_device_status_indicator(device_status_indicator: &ColoredCircle, sysfs_busid: &str) {
-    let updated_device = CfhdbPciDevice::get_device_from_busid(sysfs_busid).unwrap();
-    let started = updated_device.started.unwrap_or_default();
-    let (color, tooltip) = match (updated_device.enabled, started) {
-        (true, true) => (RGBA::GREEN, "TEST_DEVICE_ACTIVE_ENABLED"),
-        (false, true) => (RGBA::BLUE, "TEST_DEVICE_ACTIVE_DISABLED"),
-        (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), "TEST_DEVICE_STOP_ENABLED"),
-        (false, false) => (RGBA::RED, "TEST_DEVICE_STOP_DISABLED"),
-    };
-    device_status_indicator.set_color(color);
-    device_status_indicator.set_tooltip_text(Some(tooltip));
 }
 
 fn theme_changed_thread(theme_changed_action: &gio::SimpleAction) {
