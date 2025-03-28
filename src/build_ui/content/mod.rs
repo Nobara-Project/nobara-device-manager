@@ -5,7 +5,9 @@ use crate::ChannelMsg;
 use adw::prelude::*;
 use adw::*;
 use gtk::ffi::GtkWidget;
+use gtk::gdk::RGBA;
 use gtk::glib::{clone, MainContext};
+use gtk::pango::Color;
 use gtk::Orientation::Vertical;
 use gtk::{
     Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
@@ -18,13 +20,16 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
 
-use super::colored_circle;
+use super::color_badge::ColorBadge;
+use super::colored_circle::{self, ColoredCircle};
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
     hashmap_pci: HashMap<String, Vec<CfhdbPciDevice>>,
     hashmap_usb: HashMap<String, Vec<CfhdbUsbDevice>>,
 ) -> adw::OverlaySplitView {
+    let theme_changed_action = gio::SimpleAction::new("theme_changed", None);
+    theme_changed_thread(&theme_changed_action);
     let window_breakpoint = adw::Breakpoint::new(BreakpointCondition::new_length(
         BreakpointConditionLengthType::MaxWidth,
         900.0,
@@ -56,11 +61,33 @@ pub fn main_content(
     let mut usb_buttons = vec![];
     let null_toggle_sidebar = ToggleButton::default();
 
+    let mut hashmap_pci: Vec<(&String, &Vec<CfhdbPciDevice>)> = hashmap_pci.iter().collect();
+    hashmap_pci.sort_by(|a, b| {
+        let a_class = t!(format!("pci_class_name_{}", a.0))
+            .to_string()
+            .to_lowercase();
+        let b_class = t!(format!("pci_class_name_{}", b.0))
+            .to_string()
+            .to_lowercase();
+        a_class.cmp(&b_class)
+    });
+
+    let mut hashmap_usb: Vec<(&String, &Vec<CfhdbUsbDevice>)> = hashmap_usb.iter().collect();
+    hashmap_usb.sort_by(|a, b| {
+        let a_class = t!(format!("usb_class_name_{}", a.0))
+            .to_string()
+            .to_lowercase();
+        let b_class = t!(format!("usb_class_name_{}", b.0))
+            .to_string()
+            .to_lowercase();
+        a_class.cmp(&b_class)
+    });
+
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
-            &create_pci_class(&devices, &class_i18n),
+            &create_pci_class(&devices, &class_i18n, &theme_changed_action),
             Some(&class),
             &class_i18n,
         );
@@ -302,7 +329,11 @@ where
     });
 }
 
-fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindow {
+fn create_pci_class(
+    devices: &Vec<CfhdbPciDevice>,
+    class: &str,
+    theme_changed_action: &gio::SimpleAction,
+) -> ScrolledWindow {
     let devices_list_row = gtk::ListBox::builder()
         .margin_top(20)
         .margin_bottom(20)
@@ -339,7 +370,9 @@ fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindo
     //
     for device in devices {
         let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
-        let device_navigation_page_toolbar = adw::ToolbarView::builder().build();
+        let device_navigation_page_toolbar = adw::ToolbarView::builder()
+            .content(&pci_device_page(&device, &theme_changed_action))
+            .build();
         device_navigation_page_toolbar.add_top_bar(
             &adw::HeaderBar::builder()
                 .show_end_title_buttons(false)
@@ -365,13 +398,158 @@ fn create_pci_class(devices: &Vec<CfhdbPciDevice>, class: &str) -> ScrolledWindo
                 navigation_view.push(&device_navigation_page);
             }
         ));
-        let flatpak_transaction_dialog_progress_bar = colored_circle::ColoredCircle::new();
-        //flatpak_transaction_dialog_progress_bar.set_hexpand(true);
-        //flatpak_transaction_dialog_progress_bar.set_vexpand(true);
-        flatpak_transaction_dialog_progress_bar.set_width_request(15);
-        flatpak_transaction_dialog_progress_bar.set_height_request(15);
-        action_row.add_suffix(&flatpak_transaction_dialog_progress_bar);
+        let device_status_indicator = colored_circle::ColoredCircle::new();
+        device_status_indicator.set_width_request(15);
+        device_status_indicator.set_height_request(15);
+        update_pci_device_status_indicator(&device_status_indicator, &device.sysfs_busid);
+        action_row.add_suffix(&device_status_indicator);
         devices_list_row.append(&action_row);
     }
     scroll
+}
+
+fn pci_device_page(device: &CfhdbPciDevice, theme_changed_action: &gio::SimpleAction) -> gtk::Box {
+    let content_box = gtk::Box::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .orientation(Orientation::Vertical)
+        .build();
+
+    let color_badges_grid = gtk::Grid::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .halign(Align::Center)
+        .row_homogeneous(true)
+        .column_homogeneous(true)
+        .valign(Align::Start)
+        .orientation(Orientation::Vertical)
+        .build();
+
+    //
+    let device_controls_box = gtk::Box::builder()
+        .orientation(Orientation::Vertical)
+        .margin_start(10)
+        .margin_end(10)
+        .margin_bottom(20)
+        .margin_top(20)
+        .build();
+
+    //
+    let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
+    let color_badges_size_group1 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
+
+    //
+    let mut color_badges_vec = vec![];
+    let started_color_badge = ColorBadge::new();
+    let started = device.started.unwrap_or_default();
+    started_color_badge.set_label0(textwrap::fill("TEST_STARTED", 15));
+    started_color_badge.set_label1(textwrap::fill(if started { "TEST_YES" } else { "TEST_NO" }, 15));
+    started_color_badge.set_css_style(if started {
+        "background-accent-bg"
+    } else {
+        "background-red-bg"
+    });
+    started_color_badge.set_group_size0(&color_badges_size_group0);
+    started_color_badge.set_group_size1(&color_badges_size_group1);
+    started_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&started_color_badge);
+
+    let enabled_color_badge = ColorBadge::new();
+    enabled_color_badge.set_label0(textwrap::fill("TEST_ENABLED", 15));
+    enabled_color_badge.set_label1(textwrap::fill(if device.enabled { "TEST_YES" } else { "TEST_NO" }, 15));
+    enabled_color_badge.set_css_style(if device.enabled {
+        "background-accent-bg"
+    } else {
+        "background-red-bg"
+    });
+    enabled_color_badge.set_group_size0(&color_badges_size_group0);
+    enabled_color_badge.set_group_size1(&color_badges_size_group1);
+    enabled_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&enabled_color_badge);
+
+    let driver_color_badge = ColorBadge::new();
+    driver_color_badge.set_label0(textwrap::fill("TEST_DRIVER", 15));
+    driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 15));
+    driver_color_badge.set_css_style("background-accent-bg");
+    driver_color_badge.set_group_size0(&color_badges_size_group0);
+    driver_color_badge.set_group_size1(&color_badges_size_group1);
+    driver_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&driver_color_badge);
+    //
+    let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
+    let row_count = 2;
+
+    for badge in color_badges_vec {
+        if last_widget.0.is_none() {
+            color_badges_grid.attach(badge, 0, 0, 1, 1);
+        } else if last_widget.1 == row_count {
+            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Bottom, 1, 1)
+        } else if last_widget.1 > row_count {
+            color_badges_grid.attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Left, 1, 1)
+        } else {
+            color_badges_grid   .attach_next_to(badge, Some(last_widget.0.unwrap()), gtk::PositionType::Right, 1, 1)
+        }
+
+        last_widget.0 = Some(badge);
+        last_widget.1 += 1;
+    }
+    //
+
+    content_box.append(&color_badges_grid);
+
+    content_box
+}
+
+fn update_pci_device_status_indicator(device_status_indicator: &ColoredCircle, sysfs_busid: &str) {
+    let updated_device = CfhdbPciDevice::get_device_from_busid(sysfs_busid).unwrap();
+    let started = updated_device.started.unwrap_or_default();
+    let (color, tooltip) = match (updated_device.enabled, started) {
+        (true, true) => (RGBA::GREEN, "TEST_DEVICE_ACTIVE_ENABLED"),
+        (false, true) => (RGBA::BLUE, "TEST_DEVICE_ACTIVE_DISABLED"),
+        (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), "TEST_DEVICE_STOP_ENABLED"),
+        (false, false) => (RGBA::RED, "TEST_DEVICE_STOP_DISABLED"),
+    };
+    device_status_indicator.set_color(color);
+    device_status_indicator.set_tooltip_text(Some(tooltip));
+}
+
+fn theme_changed_thread(theme_changed_action: &gio::SimpleAction) {
+    let (gsettings_change_sender, gsettings_change_receiver) = async_channel::unbounded();
+    let gsettings_change_sender_clone0 = gsettings_change_sender.clone();
+
+    thread::spawn(move || {
+        let context = glib::MainContext::default();
+        let main_loop = glib::MainLoop::new(Some(&context), false);
+        let gsettings = gtk::gio::Settings::new("org.gnome.desktop.interface");
+        gsettings.connect_changed(
+            Some("accent-color"),
+            clone!(
+                #[strong]
+                gsettings_change_sender_clone0,
+                move |_, _| {
+                    let gsettings_change_sender_clone0 = gsettings_change_sender_clone0.clone();
+                    glib::timeout_add_seconds_local(5, move || {
+                        gsettings_change_sender_clone0.send_blocking(()).unwrap();
+                        glib::ControlFlow::Break
+                    });
+                }
+            ),
+        );
+        main_loop.run()
+    });
+
+    let gsettings_changed_context = MainContext::default();
+    // The main loop executes the asynchronous block
+    gsettings_changed_context.spawn_local(clone!(
+        #[strong]
+        theme_changed_action,
+        async move {
+            while let Ok(()) = gsettings_change_receiver.recv().await {
+                theme_changed_action.activate(None);
+            }
+        }
+    ));
 }

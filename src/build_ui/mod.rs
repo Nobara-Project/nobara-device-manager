@@ -1,3 +1,4 @@
+mod color_badge;
 mod colored_circle;
 mod content;
 mod loading;

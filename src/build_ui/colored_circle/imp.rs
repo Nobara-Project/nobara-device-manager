@@ -63,7 +63,7 @@ impl ObjectImpl for ColoredCircle {
                     .color()
                     .unwrap_or(gdk::RGBA::new(60.0, 255.0, 0.0, 1.0));
 
-                let delta = radius - 0.5;
+                let delta = radius - 1.0;
 
                 cr.save().unwrap();
                 cr.move_to(center_x, center_y);
