@@ -15,6 +15,7 @@ use config::APP_ID;
 
 pub enum ChannelMsg {
     OutputLine(String),
+    SuccessMsg,
     SuccessMsgDeviceFetch(
         HashMap<String, Vec<CfhdbPciDevice>>,
         HashMap<String, Vec<CfhdbUsbDevice>>,

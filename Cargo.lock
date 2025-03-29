@@ -1482,11 +1482,13 @@ dependencies = [
  "duct",
  "gtk4",
  "libadwaita",
+ "os_pipe",
  "reqwest",
  "rust-i18n",
  "serde",
  "serde_json",
  "textwrap",
+ "users",
 ]
 
 [[package]]

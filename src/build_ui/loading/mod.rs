@@ -89,6 +89,9 @@ pub fn loading_content(window: &ApplicationWindow) {
                         window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb)));
                     }
                     ChannelMsg::FailMsg => {}
+                    ChannelMsg::SuccessMsg => {
+                        panic!()
+                    }
                 }
             }
         }
