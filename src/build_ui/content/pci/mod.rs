@@ -1,4 +1,5 @@
 use crate::build_ui::color_badge::ColorBadge;
+use crate::build_ui::loading::run_in_lock_script;
 use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
 use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
 use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
@@ -16,13 +17,13 @@ use gtk::{
 };
 use libcfhdb::pci::{CfhdbPciDevice, CfhdbPciProfile};
 use libcfhdb::usb::CfhdbUsbDevice;
-use users::get_current_username;
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use users::get_current_username;
 
 use super::colored_circle::{self, ColoredCircle};
 use super::exec_duct_with_live_channel_stdout;
@@ -381,9 +382,28 @@ fn pci_device_page(
         rows_size_group.add_widget(&profile_action_box);
         available_profiles_list_row.add(&profile_expander_row);
         //
-        profile_install_button.connect_clicked(clone!(#[strong] window, #[strong] profile, move |_| {
-            profile_install(window.clone(), &profile);
-        }));
+        profile_install_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            profile,
+            #[strong]
+            update_device_status_action,
+            move |_| {
+                profile_modify(window.clone(), &profile, "install", &update_device_status_action);
+            }
+        ));
+        profile_remove_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            profile,
+            #[strong]
+            update_device_status_action,
+            move |_| {
+                profile_modify(window.clone(), &profile, "remove", &update_device_status_action);
+            }
+        ));
         update_device_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.get_status();
             profile_install_button.set_sensitive(!profile_status);
@@ -475,158 +495,174 @@ fn pci_device_page(
     content_box
 }
 
-fn profile_install(window: ApplicationWindow, profile: &CfhdbPciProfile) {
+fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreation: &str, update_device_status_action: &gio::SimpleAction) {
     let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
     let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
 
-    let profile_install_log_terminal_buffer = gtk::TextBuffer::builder().build();
+    let profile_modify_log_terminal_buffer = gtk::TextBuffer::builder().build();
 
-    let profile_install_log_terminal = gtk::TextView::builder()
+    let profile_modify_log_terminal = gtk::TextView::builder()
         .vexpand(true)
         .hexpand(true)
         .editable(false)
-        .buffer(&profile_install_log_terminal_buffer)
+        .buffer(&profile_modify_log_terminal_buffer)
         .build();
 
-    let profile_install_log_terminal_scroll = gtk::ScrolledWindow::builder()
+    let profile_modify_log_terminal_scroll = gtk::ScrolledWindow::builder()
         .width_request(400)
         .height_request(200)
         .vexpand(true)
         .hexpand(true)
-        .child(&profile_install_log_terminal)
+        .child(&profile_modify_log_terminal)
         .build();
 
-    let profile_install_dialog = adw::AlertDialog::builder()
-        .extra_child(&profile_install_log_terminal_scroll)
+    let profile_modify_dialog = adw::AlertDialog::builder()
+        .extra_child(&profile_modify_log_terminal_scroll)
         .width_request(400)
         .height_request(200)
-        .heading(t!("profile_install_dialog_heading"))
+        .heading(t!(format!("profile_{}_dialog_heading", opreation)))
         .can_close(false)
         .build();
-    profile_install_dialog.add_response(
-        "profile_install_dialog_ok",
-        &t!("profile_install_dialog_ok_label").to_string(),
+    profile_modify_dialog.add_response(
+        "profile_modify_dialog_ok",
+        &t!(format!("profile_{}_dialog_ok_label", opreation)).to_string(),
     );
-    profile_install_dialog.add_response(
-        "profile_install_dialog_reboot",
-        &t!("profile_install_dialog_reboot_label").to_string(),
+    profile_modify_dialog.add_response(
+        "profile_modify_dialog_reboot",
+        &t!(format!("profile_{}_dialog_reboot_label", opreation)).to_string(),
     );
-    profile_install_dialog.set_response_appearance(
-        "profile_install_dialog_reboot",
+    profile_modify_dialog.set_response_appearance(
+        "profile_modify_dialog_reboot",
         adw::ResponseAppearance::Suggested,
     );
 
     //
 
-    thread::spawn(clone!(#[strong] profile, move || {
-        match profile.packages {
-            Some(t) => {
-                let package_list = t.join(" ");
-                let cmd = duct::cmd!("pkexec", "bash", "-c", format!("apt-get --assume-no install {}", package_list));
-                match exec_duct_with_live_channel_stdout(&log_loop_sender, cmd) {
-                    Ok(_) => {
-                        
+    let string_opreation = String::from(opreation);
+
+    thread::spawn(clone!(
+        #[strong]
+        profile,
+        #[strong]
+        string_opreation,
+        move || {
+            let script = match string_opreation.as_str() {
+                "install" => profile.install_script,
+                "remove" => profile.remove_script,
+                _ => panic!(),
+            };
+            match script {
+                Some(t) => match profile.packages {
+                    Some(a) => {
+                        let package_list = a.join(" ");
+                        let modify_command =
+                            format!("apt-get --assume-no {} {}", &string_opreation, package_list);
+                        run_in_lock_script(
+                            &log_loop_sender,
+                            &format!("#! /bin/bash\nset -e\n{}\n{}", modify_command, t),
+                        );
                     }
-                    Err(_) => {
-                        log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
-                        return ();
+                    None => {
+                        run_in_lock_script(
+                            &log_loop_sender,
+                            &format!("#! /bin/bash\nset -e\n{}", t),
+                        );
                     }
-                }
-            }
-            None => {}
-        }
-        match profile.install_script {
-            Some(t) => {
-                let file_path = "/var/cache/cfhdb/script_lock.sh";
-                let file_fs_path = std::path::Path::new(file_path);
-                if file_fs_path.exists() {
-                    std::fs::remove_file(file_fs_path).unwrap();
-                }
-                {
-                    let mut file = std::fs::OpenOptions::new()
-                        .write(true)
-                        .create(true)
-                        .truncate(true)
-                        .open(file_path)
-                        .expect(&(file_path.to_string() + "cannot be read"));
-                    file.write_all(format!("#! /bin/bash\nset -e\n{}", t).as_bytes())
-                        .expect(&(file_path.to_string() + "cannot be written to"));
-                    let mut perms = file
-                        .metadata()
-                        .expect(&(file_path.to_string() + "cannot be read"))
-                        .permissions();
-                    perms.set_mode(0o777);
-                    std::fs::set_permissions(file_path, perms)
-                        .expect(&(file_path.to_string() + "cannot be written to"));
-                }
-                let final_cmd = if get_current_username().unwrap() == "root" {
-                    duct::cmd!(file_path)
-                } else {
-                    duct::cmd!("pkexec", file_path)
-                };
-                match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
-                    Ok(_) => {
-                        log_loop_sender.send_blocking(ChannelMsg::SuccessMsg).unwrap();
+                },
+                None => match profile.packages {
+                    Some(a) => {
+                        let package_list = a.join(" ");
+                        let modify_command =
+                            format!("apt-get --assume-no {} {}", &string_opreation, package_list);
+                        run_in_lock_script(
+                            &log_loop_sender,
+                            &format!("#! /bin/bash\nset -e\n{}", modify_command),
+                        );
                     }
-                    Err(_) => {
-                        log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
+                    None => {
+                        log_loop_sender
+                            .send_blocking(ChannelMsg::SuccessMsg)
+                            .unwrap();
                     }
-                }
-            }
-            None => {
-                log_loop_sender.send_blocking(ChannelMsg::SuccessMsg).unwrap();
+                },
             }
         }
-    }));
+    ));
 
     let log_loop_context = MainContext::default();
     // The main loop executes the asynchronous block
     log_loop_context.spawn_local(clone!(
         #[strong]
-        profile_install_log_terminal_buffer,
+        profile_modify_log_terminal_buffer,
         #[strong]
-        profile_install_dialog,
+        profile_modify_dialog,
+        #[strong]
+        string_opreation,
         async move {
-    while let Ok(state) = log_loop_receiver.recv().await {
-        match state {
-            ChannelMsg::OutputLine(line) => {
-                profile_install_log_terminal_buffer.insert(&mut profile_install_log_terminal_buffer.end_iter(), &("\n".to_string() + &line))
-            }
-            ChannelMsg::SuccessMsg => {
-                if get_current_username().unwrap() == "pikaos" {
-                        profile_install_dialog.set_response_enabled("profile_install_dialog_reboot", false);
-                    } else {
-                        profile_install_dialog.set_response_enabled("profile_install_dialog_reboot", true);
+            while let Ok(state) = log_loop_receiver.recv().await {
+                match state {
+                    ChannelMsg::OutputLine(line) => profile_modify_log_terminal_buffer.insert(
+                        &mut profile_modify_log_terminal_buffer.end_iter(),
+                        &("\n".to_string() + &line),
+                    ),
+                    ChannelMsg::SuccessMsg => {
+                        if get_current_username().unwrap() == "pikaos" {
+                            profile_modify_dialog
+                                .set_response_enabled("profile_modify_dialog_reboot", false);
+                        } else {
+                            profile_modify_dialog
+                                .set_response_enabled("profile_modify_dialog_reboot", true);
+                        }
+                        profile_modify_dialog
+                            .set_response_enabled("profile_modify_dialog_reboot", true);
+                        profile_modify_dialog.set_body(
+                            &t!(format!(
+                                "profile_{}_dialog_body_successful",
+                                &string_opreation
+                            ))
+                            .to_string(),
+                        );
                     }
-                profile_install_dialog.set_response_enabled("profile_install_dialog_reboot", true);
-                profile_install_dialog.set_body(&t!("profile_install_dialog_body_successful").to_string());
-            }
-            ChannelMsg::FailMsg => {
-                profile_install_dialog.set_response_enabled("profile_install_dialog_ok", true);
-                profile_install_dialog.set_body(&t!("profile_install_dialog_body_failed").to_string());
-                profile_install_dialog.set_response_enabled("profile_install_dialog_reboot", false);
-            }
-            ChannelMsg::SuccessMsgDeviceFetch(_, _) => {
-                panic!();
+                    ChannelMsg::FailMsg => {
+                        profile_modify_dialog
+                            .set_response_enabled("profile_modify_dialog_ok", true);
+                        profile_modify_dialog.set_body(&t!(format!(
+                            "profile_{}_dialog_body_failed",
+                            &string_opreation
+                        )
+                        .to_string()));
+                        profile_modify_dialog
+                            .set_response_enabled("profile_modify_dialog_reboot", false);
+                    }
+                    ChannelMsg::SuccessMsgDeviceFetch(_, _) => {
+                        panic!();
+                    }
+                }
             }
         }
-    }
-    }));
+    ));
 
-    profile_install_dialog.set_response_enabled("profile_install_dialog_ok", false);
-    profile_install_dialog.set_response_enabled("profile_install_dialog_reboot", false);
-    let dialog_closure = clone!(#[strong] profile_install_dialog, move |choice: glib::GString| {
-        match choice.as_str() {
-            "profile_install_dialog_reboot" => {
-                Command::new("systemctl")
-                .arg("reboot")
-                .spawn()
-                .expect("systemctl reboot failed to start");
-            }
-            _ => {
-                profile_install_dialog.force_close();
+    profile_modify_dialog.set_response_enabled("profile_modify_dialog_ok", false);
+    profile_modify_dialog.set_response_enabled("profile_modify_dialog_reboot", false);
+    let dialog_closure = clone!(
+        #[strong]
+        profile_modify_dialog,
+        #[strong]
+        update_device_status_action,
+        move |choice: glib::GString| {
+            match choice.as_str() {
+                "profile_modify_dialog_reboot" => {
+                    Command::new("systemctl")
+                        .arg("reboot")
+                        .spawn()
+                        .expect("systemctl reboot failed to start");
+                }
+                _ => {
+                    profile_modify_dialog.force_close();
+                    update_device_status_action.activate(None);
+                }
             }
         }
-        });
-    profile_install_dialog.choose(&window, gio::Cancellable::NONE, dialog_closure);
+    );
+    profile_modify_dialog.choose(&window, gio::Cancellable::NONE, dialog_closure);
 }

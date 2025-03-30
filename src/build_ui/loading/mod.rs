@@ -14,10 +14,15 @@ use gtk::{
 };
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
+use users::get_current_username;
 use std::collections::HashMap;
+use std::io::Write;
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
+
+use super::content::exec_duct_with_live_channel_stdout;
 
 pub fn loading_content(window: &ApplicationWindow) {
     let (status_sender, status_receiver) = async_channel::unbounded::<ChannelMsg>();
@@ -150,4 +155,44 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
             }
         }
     });
+}
+
+pub fn run_in_lock_script(log_loop_sender: &async_channel::Sender<ChannelMsg>, script: &str) {
+    let file_path = "/var/cache/cfhdb/script_lock.sh";
+    let file_fs_path = std::path::Path::new(file_path);
+    if file_fs_path.exists() {
+        std::fs::remove_file(file_fs_path).unwrap();
+    }
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(file_path)
+            .expect(&(file_path.to_string() + "cannot be read"));
+        file.write_all(script.as_bytes())
+            .expect(&(file_path.to_string() + "cannot be written to"));
+        let mut perms = file
+            .metadata()
+            .expect(&(file_path.to_string() + "cannot be read"))
+            .permissions();
+        perms.set_mode(0o777);
+        std::fs::set_permissions(file_path, perms)
+            .expect(&(file_path.to_string() + "cannot be written to"));
+    }
+    let final_cmd = if get_current_username().unwrap() == "root" {
+        duct::cmd!(file_path)
+    } else {
+        duct::cmd!("pkexec", file_path)
+    };
+    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
+        Ok(_) => {
+            log_loop_sender
+                .send_blocking(ChannelMsg::SuccessMsg)
+                .unwrap();
+        }
+        Err(_) => {
+            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
+        }
+    }
 }

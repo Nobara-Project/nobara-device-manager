@@ -18,11 +18,11 @@ use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use pci::create_pci_class;
 use std::collections::HashMap;
+use std::io::BufRead;
 use std::io::BufReader;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::io::BufRead;
 
 use super::color_badge::ColorBadge;
 use super::colored_circle::{self, ColoredCircle};
@@ -372,7 +372,6 @@ fn theme_changed_thread(theme_changed_action: &gio::SimpleAction) {
         }
     ));
 }
-
 
 pub fn exec_duct_with_live_channel_stdout(
     //sender: async_channel::Sender<String>,
