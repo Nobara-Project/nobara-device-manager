@@ -7,11 +7,24 @@ pub const APP_GIT: &str = "https://git.pika-os.com/custom-gui-packages/pika-devi
 
 // CFHDB
 
-pub const PCI_PROFILE_JSON_URL: &str =
-    "https://github.com/CosmicFusion/cfhdb/raw/refs/heads/master/data/profiles/pci.json";
-pub const USB_PROFILE_JSON_URL: &str =
-    "https://github.com/CosmicFusion/cfhdb/raw/refs/heads/master/data/profiles/usb.json";
+#[derive(serde::Deserialize)]
+pub struct ProfileUrlConfig {
+    pci_json_url: String,
+    usb_json_url: String,
+}
 
 pub fn distro_package_manager(opreation: &str, package_list: &str) -> String {
     format!("apt-get --assume-yes {} {}", &opreation, package_list)
+}
+
+lazy_static::lazy_static! {
+    pub static ref PCI_PROFILE_JSON_URL: String = get_profile_url_config().pci_json_url;
+    pub static ref USB_PROFILE_JSON_URL: String = get_profile_url_config().usb_json_url;
+}
+
+fn get_profile_url_config() -> ProfileUrlConfig {
+    let file_path = "/etc/cfhdb/profile-config.json";
+    let json_content = std::fs::read_to_string(file_path).unwrap();
+    let config: ProfileUrlConfig = serde_json::from_str(&json_content).unwrap();
+    config
 }

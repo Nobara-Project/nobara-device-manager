@@ -31,7 +31,7 @@ pub fn get_usb_profiles_from_url(
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap();
-    let data = match client.get(USB_PROFILE_JSON_URL).send() {
+    let data = match client.get(USB_PROFILE_JSON_URL.clone()).send() {
         Ok(t) => {
             sender
                 .send_blocking(ChannelMsg::OutputLine(format!(

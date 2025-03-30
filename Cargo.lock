@@ -1481,6 +1481,7 @@ dependencies = [
  "cfhdb",
  "duct",
  "gtk4",
+ "lazy_static",
  "libadwaita",
  "os_pipe",
  "reqwest",
