@@ -155,7 +155,7 @@ fn pci_device_page(
     //
     let mut color_badges_vec = vec![];
     let started_color_badge = ColorBadge::new();
-    started_color_badge.set_label0(textwrap::fill("TEST_STARTED", 10));
+    started_color_badge.set_label0(textwrap::fill(&t!("device_started"), 10));
     started_color_badge.set_group_size0(&color_badges_size_group0);
     started_color_badge.set_group_size1(&color_badges_size_group1);
     started_color_badge.set_theme_changed_action(theme_changed_action);
@@ -163,7 +163,7 @@ fn pci_device_page(
     color_badges_vec.push(&started_color_badge);
 
     let enabled_color_badge = ColorBadge::new();
-    enabled_color_badge.set_label0(textwrap::fill("TEST_ENABLED", 10));
+    enabled_color_badge.set_label0(textwrap::fill(&t!("device_enabled"), 10));
     enabled_color_badge.set_group_size0(&color_badges_size_group0);
     enabled_color_badge.set_group_size1(&color_badges_size_group1);
     enabled_color_badge.set_theme_changed_action(theme_changed_action);
@@ -171,7 +171,7 @@ fn pci_device_page(
     color_badges_vec.push(&enabled_color_badge);
 
     let driver_color_badge = ColorBadge::new();
-    driver_color_badge.set_label0(textwrap::fill("TEST_DRIVER", 10));
+    driver_color_badge.set_label0(textwrap::fill(&t!("device_driver"), 10));
     driver_color_badge.set_css_style("background-accent-bg");
     driver_color_badge.set_group_size0(&color_badges_size_group0);
     driver_color_badge.set_group_size1(&color_badges_size_group1);
@@ -180,7 +180,7 @@ fn pci_device_page(
     color_badges_vec.push(&driver_color_badge);
 
     let sysfs_busid_color_badge = ColorBadge::new();
-    sysfs_busid_color_badge.set_label0(textwrap::fill("TEST_SYSFS_BUSID", 10));
+    sysfs_busid_color_badge.set_label0(textwrap::fill(&t!("device_sysfs_busid"), 10));
     sysfs_busid_color_badge.set_css_style("background-accent-bg");
     sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
     sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
@@ -189,7 +189,7 @@ fn pci_device_page(
     color_badges_vec.push(&sysfs_busid_color_badge);
 
     let vendor_id_color_badge = ColorBadge::new();
-    vendor_id_color_badge.set_label0(textwrap::fill("TEST_VENDOR_ID", 10));
+    vendor_id_color_badge.set_label0(textwrap::fill(&t!("device_vendor_id"), 10));
     vendor_id_color_badge.set_css_style("background-accent-bg");
     vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
     vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -198,7 +198,7 @@ fn pci_device_page(
     color_badges_vec.push(&vendor_id_color_badge);
 
     let device_id_color_badge = ColorBadge::new();
-    device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 10));
+    device_id_color_badge.set_label0(textwrap::fill(&t!("device_device_id"), 10));
     device_id_color_badge.set_css_style("background-accent-bg");
     device_id_color_badge.set_group_size0(&color_badges_size_group0);
     device_id_color_badge.set_group_size1(&color_badges_size_group1);

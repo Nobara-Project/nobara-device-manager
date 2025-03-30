@@ -26,8 +26,8 @@ use std::thread;
 
 pub fn build_ui(app: &adw::Application) {
     // setup glib
-    gtk::glib::set_prgname(Some(t!("app_name").to_string()));
-    glib::set_application_name(&t!("app_name").to_string());
+    gtk::glib::set_prgname(Some(t!("application_name").to_string()));
+    glib::set_application_name(&t!("application_name").to_string());
     //
     let glib_settings = gio::Settings::new(APP_ID);
 
