@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=PikaOS Device Manager
+Exec=pika-device-manager
+Icon=com.github.pikaos-linux.pikadevicemanager
+Terminal=false
+Type=Application
+Encoding=UTF-8
+Categories=Application;System;Settings;XFCE;X-XFCE-SettingsDialog;X-XFCE-SystemSettings;
+StartupNotify=true
