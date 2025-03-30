@@ -1,6 +1,5 @@
 use crate::build_ui::color_badge::ColorBadge;
 use crate::build_ui::loading::run_in_lock_script;
-use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
 use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
 use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
 use crate::ChannelMsg;
@@ -15,8 +14,7 @@ use gtk::{
     Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
     ToggleButton, Widget,
 };
-use libcfhdb::pci::{CfhdbPciDevice, CfhdbPciProfile};
-use libcfhdb::usb::CfhdbUsbDevice;
+use libcfhdb::usb::{CfhdbUsbDevice, CfhdbUsbProfile};
 use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
@@ -28,9 +26,9 @@ use users::get_current_username;
 use super::colored_circle::{self, ColoredCircle};
 use super::{error_dialog, exec_duct_with_live_channel_stdout};
 
-pub fn create_pci_class(
+pub fn create_usb_class(
     window: &ApplicationWindow,
-    devices: &Vec<CfhdbPciDevice>,
+    devices: &Vec<CfhdbUsbDevice>,
     class: &str,
     theme_changed_action: &gio::SimpleAction,
     update_device_status_action: &gio::SimpleAction,
@@ -73,9 +71,9 @@ pub fn create_pci_class(
         let device_status_indicator = colored_circle::ColoredCircle::new();
         device_status_indicator.set_width_request(15);
         device_status_indicator.set_height_request(15);
-        let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
+        let device_title = format!("{} - {}", &device.manufacturer_string_index, &device.product_string_index);
         let device_navigation_page_toolbar = adw::ToolbarView::builder()
-            .content(&pci_device_page(
+            .content(&usb_device_page(
                 &window,
                 &device,
                 &theme_changed_action,
@@ -114,9 +112,9 @@ pub fn create_pci_class(
     scroll
 }
 
-fn pci_device_page(
+fn usb_device_page(
     window: &ApplicationWindow,
-    device: &CfhdbPciDevice,
+    device: &CfhdbUsbDevice,
     theme_changed_action: &gio::SimpleAction,
     update_device_status_action: &gio::SimpleAction,
     device_status_indicator: &ColoredCircle,
@@ -197,14 +195,14 @@ fn pci_device_page(
 
     color_badges_vec.push(&vendor_id_color_badge);
 
-    let device_id_color_badge = ColorBadge::new();
-    device_id_color_badge.set_label0(textwrap::fill("TEST_DEVICE_ID", 10));
-    device_id_color_badge.set_css_style("background-accent-bg");
-    device_id_color_badge.set_group_size0(&color_badges_size_group0);
-    device_id_color_badge.set_group_size1(&color_badges_size_group1);
-    device_id_color_badge.set_theme_changed_action(theme_changed_action);
+    let product_id_color_badge = ColorBadge::new();
+    product_id_color_badge.set_label0(textwrap::fill("TEST_PRODUCT_ID", 10));
+    product_id_color_badge.set_css_style("background-accent-bg");
+    product_id_color_badge.set_group_size0(&color_badges_size_group0);
+    product_id_color_badge.set_group_size1(&color_badges_size_group1);
+    product_id_color_badge.set_theme_changed_action(theme_changed_action);
 
-    color_badges_vec.push(&device_id_color_badge);
+    color_badges_vec.push(&product_id_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
     let row_count = (color_badges_vec.len() / 2) as i32;
@@ -464,7 +462,7 @@ fn pci_device_page(
         control_button_disable_device_button,
         move |_, _| {
             let updated_device =
-                CfhdbPciDevice::get_device_from_busid(&device.sysfs_busid).unwrap();
+                CfhdbUsbDevice::get_device_from_busid(&device.sysfs_busid).unwrap();
             let (started, enabled) = (
                 updated_device.started.unwrap_or_default(),
                 updated_device.enabled,
@@ -505,7 +503,7 @@ fn pci_device_page(
             driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 10));
             sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 10));
             vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 10));
-            device_id_color_badge.set_label1(textwrap::fill(&device.device_id.as_str(), 10));
+            product_id_color_badge.set_label1(textwrap::fill(&device.product_id.as_str(), 10));
         }
     ));
 
@@ -526,7 +524,7 @@ fn pci_device_page(
     content_box
 }
 
-fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreation: &str, update_device_status_action: &gio::SimpleAction) {
+fn profile_modify(window: ApplicationWindow, profile: &CfhdbUsbProfile, opreation: &str, update_device_status_action: &gio::SimpleAction) {
     let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
     let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
 

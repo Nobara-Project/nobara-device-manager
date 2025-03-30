@@ -17,6 +17,7 @@ use gtk::{
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use pci::create_pci_class;
+use usb::create_usb_class;
 use std::collections::HashMap;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -28,6 +29,7 @@ use super::color_badge::ColorBadge;
 use super::colored_circle::{self, ColoredCircle};
 
 mod pci;
+mod usb;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
@@ -89,11 +91,13 @@ pub fn main_content(
         a_class.cmp(&b_class)
     });
 
+    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
+
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
-            &create_pci_class(&window, &devices, &class_i18n, &theme_changed_action),
+            &create_pci_class(&window, &devices, &class_i18n, &theme_changed_action, &update_device_status_action),
             Some(&class),
             &class_i18n,
         );
@@ -107,24 +111,30 @@ pub fn main_content(
             },
             class.clone(),
             class_i18n,
-            "".into(),
+            get_icon_for_class(&class).unwrap_or("dialog-question-symbolic").into(),
             &null_toggle_sidebar,
         ));
     }
 
     for (class, devices) in hashmap_usb {
         let class = format!("usb_class_name_{}", class);
+        let class_i18n = t!(class).to_string();
         window_stack.add_titled(
-            &gtk::Label::new(Some(&class)),
+            &create_usb_class(&window, &devices, &class_i18n, &theme_changed_action, &update_device_status_action),
             Some(&class),
-            &t!(class).to_string(),
+            &class_i18n,
         );
         usb_buttons.push(custom_stack_selection_button(
             &window_stack,
-            false,
+            if is_first {
+                is_first = false;
+                true
+            } else {
+                false
+            },
             class.clone(),
-            t!(class).to_string(),
-            "".into(),
+            class_i18n,
+            get_icon_for_class(&class).unwrap_or("dialog-question-symbolic").into(),
             &null_toggle_sidebar,
         ));
     }
@@ -192,6 +202,7 @@ fn main_content_sidebar(
     for button in pci_buttons {
         main_content_sidebar_box.append(button);
     }
+    main_content_sidebar_box.append(&gtk::Separator::builder().orientation(Orientation::Horizontal).build());
     main_content_sidebar_box.append(&usb_label);
     for button in usb_buttons {
         main_content_sidebar_box.append(button);
@@ -391,4 +402,170 @@ pub fn exec_duct_with_live_channel_stdout(
     child.wait()?;
 
     Ok(())
+}
+
+pub fn error_dialog(window: ApplicationWindow, heading: &str, error: &str) {
+    let error_dialog = adw::AlertDialog::builder()
+        .body(error)
+        .width_request(400)
+        .height_request(200)
+        .heading(heading)
+        .build();
+    error_dialog.add_response(
+        "error_dialog_ok",
+        &t!("error_dialog_ok_label").to_string(),
+    );
+    error_dialog.present(Some(&window));
+}
+
+pub fn get_icon_for_class(class: &str) -> Option<&str> {
+    match class {
+        // pci_classes
+        "pci_class_name_0000" => Some("dialog-question-symbolic"),
+        "pci_class_name_0001" => Some("dialog-question-symbolic"),
+        "pci_class_name_0100" => Some("scsi-symbolic"),
+        "pci_class_name_0101" => Some("drive-harddisk-ieee1394-symbolic"),
+        "pci_class_name_0102" => Some("media-floppy-symbolic"),
+        "pci_class_name_0103" => Some("scsi-symbolic"),
+        "pci_class_name_0104" => Some("path-combine-symbolic"),
+        "pci_class_name_0105" => Some("drive-harddisk-ieee1394-symbolic"),
+        "pci_class_name_0106" => Some("drive-harddisk-solidstate-symbolic"),
+        "pci_class_name_0107" => Some("drive-harddisk-symbolic"),
+        "pci_class_name_0108" => Some("drive-harddisk-solidstate-symbolic"),
+        "pci_class_name_0109" => Some("media-flash-symbolic"),
+        "pci_class_name_0180" => Some("drive-removable-media-symbolic"),
+        "pci_class_name_0200" => Some("network-wired-symbolic"),
+        "pci_class_name_0201" => Some("network-wired-symbolic"),
+        "pci_class_name_0202" => Some("network-wired-symbolic"),
+        "pci_class_name_0203" => Some("network-transmit-receive-symbolic"),
+        "pci_class_name_0204" => Some("network-wired-symbolic"),
+        "pci_class_name_0205" => Some("network-receive-symbolic"),
+        "pci_class_name_0206" => Some("emblem-shared-symbolic"),
+        "pci_class_name_0207" => Some("nvidia"),
+        "pci_class_name_0208" => Some("intel"),
+        "pci_class_name_0280" => Some("network-wired-symbolic"),
+        "pci_class_name_0300" => Some("video-display-symbolic"),
+        "pci_class_name_0301" => Some("camera-video-symbolic"),
+        "pci_class_name_0302" => Some("applications-graphics-symbolic"),
+        "pci_class_name_0380" => Some("video-display-symbolic"),
+        "pci_class_name_0400" => Some("video-display-symbolic"),
+        "pci_class_name_0401" => Some("audio-card-symbolic"),
+        "pci_class_name_0402" => Some("call-start-symbolic"),
+        "pci_class_name_0403" => Some("audio-card-symbolic"),
+        "pci_class_name_0480" => Some("audio-card-symbolic"),
+        "pci_class_name_0500" => Some("ram-symbolic"),
+        "pci_class_name_0501" => Some("media-flash-symbolic"),
+        "pci_class_name_0580" => Some("ram-symbolic"),
+        "pci_class_name_0600" => Some("cpu-symbolic"),
+        "pci_class_name_0601" => Some("cpu-symbolic"),
+        "pci_class_name_0602" => Some("cpu-symbolic"),
+        "pci_class_name_0603" => Some("cpu-symbolic"),
+        "pci_class_name_0604" => Some("cpu-symbolic"),
+        "pci_class_name_0605" => Some("cpu-symbolic"),
+        "pci_class_name_0606" => Some("cpu-symbolic"),
+        "pci_class_name_0607" => Some("cpu-symbolic"),
+        "pci_class_name_0608" => Some("cpu-symbolic"),
+        "pci_class_name_0609" => Some("cpu-symbolic"),
+        "pci_class_name_060A" => Some("nvidia"),
+        "pci_class_name_060B" => Some("cpu-symbolic"),
+        "pci_class_name_0680" => Some("cpu-symbolic"),
+        "pci_class_name_0700" => Some("serial-port-symbolic"),
+        "pci_class_name_0701" => Some("format-justify-left-symbolic"),
+        "pci_class_name_0702" => Some("serial-port-symbolic"),
+        "pci_class_name_0703" => Some("modem-symbolic"),
+        "pci_class_name_0704" => Some("modem-symbolic"),
+        "pci_class_name_0705" => Some("auth-smartcard-symbolic"),
+        "pci_class_name_0780" => Some("modem-symbolic"),
+        "pci_class_name_0800" => Some("cpu-symbolic"),
+        "pci_class_name_0801" => Some("cpu-symbolic"),
+        "pci_class_name_0802" => Some("cpu-symbolic"),
+        "pci_class_name_0803" => Some("cpu-symbolic"),
+        "pci_class_name_0804" => Some("cpu-symbolic"),
+        "pci_class_name_0805" => Some("cpu-symbolic"),
+        "pci_class_name_0806" => Some("applications-utilities-symbolic"),
+        "pci_class_name_0807" => Some("cpu-symbolic"),
+        "pci_class_name_0880" => Some("cpu-symbolic"),
+        "pci_class_name_0900" => Some("input-keyboard-symbolic"),
+        "pci_class_name_0901" => Some("tool-pencil-symbolic"),
+        "pci_class_name_0902" => Some("input-mouse-symbolic"),
+        "pci_class_name_0903" => Some("scanner-symbolic"),
+        "pci_class_name_0904" => Some("input-gaming-symbolic"),
+        "pci_class_name_0980" => Some("input-keyboard-symbolic"),
+        "pci_class_name_0A00" => Some("standard-input-symbolic"),
+        "pci_class_name_0A80" => Some("standard-input-symbolic"),
+        "pci_class_name_0B00" => Some("cpu-symbolic"),
+        "pci_class_name_0B01" => Some("cpu-symbolic"),
+        "pci_class_name_0B02" => Some("cpu-symbolic"),
+        "pci_class_name_0B10" => Some("cpu-symbolic"),
+        "pci_class_name_0B20" => Some("cpu-symbolic"),
+        "pci_class_name_0B30" => Some("cpu-symbolic"),
+        "pci_class_name_0B40" => Some("cpu-symbolic"),
+        "pci_class_name_0B80" => Some("cpu-symbolic"),
+        "pci_class_name_0C00" => Some("serial-port-symbolic"),
+        "pci_class_name_0C01" => Some("serial-port-symbolic"),
+        "pci_class_name_0C02" => Some("serial-port-symbolic"), 
+        "pci_class_name_0C03" => Some("drive-harddisk-usb-symbolic"),
+        "pci_class_name_0C04" => Some("network-wired-symbolic"),
+        "pci_class_name_0C05" => Some("cpu-symbolic"),
+        "pci_class_name_0C06" => Some("nvidia"),
+        "pci_class_name_0C07" => Some("serial-port-symbolic"),
+        "pci_class_name_0C08" => Some("serial-port-symbolic"),
+        "pci_class_name_0C09" => Some("serial-port-symbolic"),
+        "pci_class_name_0C0A" => Some("serial-port-symbolic"),
+        "pci_class_name_0C80" => Some("drive-harddisk-usb-symbolic"),
+        "pci_class_name_0D00" => Some("input-tvremote-symbolic"),
+        "pci_class_name_0D01" => Some("input-tvremote-symbolic"),
+        "pci_class_name_0D10" => Some("input-tvremote-symbolic"),
+        "pci_class_name_0D11" => Some("bluetooth-active-symbolic"),
+        "pci_class_name_0D12" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_0D20" => Some("network-cellular-edge-symbolic"),
+        "pci_class_name_0D21" => Some("network-cellular-gprs-symbolic"),
+        "pci_class_name_0D40" => Some("network-cellular-signal-good-symbolic"),
+        "pci_class_name_0D41" => Some("network-cellular-signal-good-symbolic"),
+        "pci_class_name_0D80" => Some("network-wireless-symbolic"),
+        "pci_class_name_0E00" => Some("network-receive-symbolic"),
+        "pci_class_name_0F01" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_0F02" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_0F03" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_0F04" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_0F80" => Some("daytime-sunrise-symbolic"),
+        "pci_class_name_1000" => Some("network-wireless-encrypted-symbolic"),
+        "pci_class_name_1010" => Some("network-wireless-encrypted-symbolic"),
+        "pci_class_name_1080" => Some("network-wireless-encrypted-symbolic"),
+        "pci_class_name_1100" => Some("cpu-symbolic"),
+        "pci_class_name_1101" => Some("cpu-symbolic"),
+        "pci_class_name_1110" => Some("cpu-symbolic"),
+        "pci_class_name_1120" => Some("cpu-symbolic"),
+        "pci_class_name_1180" => Some("cpu-symbolic"),
+        "pci_class_name_1200" => Some("cpu-symbolic"),
+        "pci_class_name_1300" => Some("cpu-symbolic"),
+        // usb classes
+        "usb_class_name_00" => Some("dialog-question-symbolic"),
+        "usb_class_name_01" => Some("audio-card-symbolic"),
+        "usb_class_name_02" => Some("network-wireless-symbolic"),
+        "usb_class_name_03" => Some("input-keyboard-symbolic"),
+        "usb_class_name_05" => Some("input-touchpad-symbolic"),
+        "usb_class_name_06" => Some("camera-web-symbolic"),
+        "usb_class_name_07" => Some("printer-symbolic"),
+        "usb_class_name_08" => Some("drive-removable-media-symbolic"),
+        "usb_class_name_09" => Some("media-playlist-shuffle-symbolic"),
+        "usb_class_name_0A" => Some("drive-harddisk-usb-symbolic"),
+        "usb_class_name_0B" => Some("auth-smartcard-symbolic"),
+        "usb_class_name_0D" => Some("network-wireless-encrypted-symbolic"),
+        "usb_class_name_0E" => Some("video-x-generic-symbolic"),
+        "usb_class_name_0F" => Some("face-smile-big-symbolic"),
+        "usb_class_name_10" => Some("video-x-generic-symbolic"),
+        "usb_class_name_11" => Some("input-tablet-symbolic"),
+        "usb_class_name_12" => Some("drive-harddisk-usb-symbolic"),
+        "usb_class_name_13" => Some("video-display-symbolic"),
+        "usb_class_name_14" => Some("drive-harddisk-usb-symbolic"),
+        "usb_class_name_3C" => Some("cpu-symbolic"),
+        "usb_class_name_DC" => Some("dialog-warning-symbolic"),
+        "usb_class_name_E0" => Some("network-wireless-symbolic"),
+        "usb_class_name_EF" => Some("dialog-question-symbolic"),
+        "usb_class_name_FE" => Some("dialog-question-symbolic"),
+        "usb_class_name_FF" => Some("dialog-question-symbolic"),
+        //
+        _ => None
+    }
 }
