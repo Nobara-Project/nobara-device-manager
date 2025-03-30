@@ -309,6 +309,42 @@ fn pci_device_page(
 
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
 
+    control_button_start_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
+        match device.start_device() {
+            Ok(_) => update_device_status_action.activate(None),
+            Err(e) => {
+                error_dialog(window.clone(), "TEST_DEVICE_START_ERROR", &e.to_string())
+            }
+        }
+    }));
+
+    control_button_enable_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
+        match device.enable_device() {
+            Ok(_) => update_device_status_action.activate(None),
+            Err(e) => {
+                error_dialog(window.clone(), "TEST_DEVICE_ENABLE_ERROR", &e.to_string())
+            }
+        }
+    }));
+
+    control_button_stop_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
+        match device.stop_device() {
+            Ok(_) => update_device_status_action.activate(None),
+            Err(e) => {
+                error_dialog(window.clone(), "TEST_DEVICE_STOP_ERROR", &e.to_string())
+            }
+        }
+    }));
+
+    control_button_disable_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
+        match device.disable_device() {
+            Ok(_) => update_device_status_action.activate(None),
+            Err(e) => {
+                error_dialog(window.clone(), "TEST_DEVICE_DISABLE_ERROR", &e.to_string())
+            }
+        }
+    }));
+
     for profile in profiles {
         let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
             gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
@@ -426,6 +462,7 @@ fn pci_device_page(
         #[strong]
         control_button_disable_device_button,
         move |_, _| {
+            std::thread::sleep(std::time::Duration::from_secs(1));
             let updated_device =
                 CfhdbPciDevice::get_device_from_busid(&device.sysfs_busid).unwrap();
             let (started, enabled) = (
@@ -441,17 +478,11 @@ fn pci_device_page(
             device_status_indicator.set_color(color);
             device_status_indicator.set_tooltip_text(Some(tooltip));
 
-            if started {
-                control_button_start_device_button.set_sensitive(false);
-            } else {
-                control_button_stop_device_button.set_sensitive(true);
-            }
+            control_button_start_device_button.set_sensitive(!started);
+            control_button_stop_device_button.set_sensitive(started);
 
-            if enabled {
-                control_button_enable_device_button.set_sensitive(false);
-            } else {
-                control_button_disable_device_button.set_sensitive(true);
-            }
+            control_button_enable_device_button.set_sensitive(!enabled);
+            control_button_disable_device_button.set_sensitive(enabled);
 
             started_color_badge.set_label1(textwrap::fill(
                 if started { "TEST_YES" } else { "TEST_NO" },
@@ -665,4 +696,18 @@ fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreatio
         }
     );
     profile_modify_dialog.choose(&window, gio::Cancellable::NONE, dialog_closure);
+}
+
+fn error_dialog(window: ApplicationWindow, heading: &str, error: &str) {
+    let error_dialog = adw::AlertDialog::builder()
+        .body(error)
+        .width_request(400)
+        .height_request(200)
+        .heading(heading)
+        .build();
+    error_dialog.add_response(
+        "error_dialog_ok",
+        &t!("error_dialog_ok_label").to_string(),
+    );
+    error_dialog.present(Some(&window));
 }

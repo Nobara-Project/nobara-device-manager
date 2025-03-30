@@ -7,6 +7,7 @@ use gtk::pango;
 use gtk::SizeGroup;
 use gtk::{ffi::gtk_widget_queue_draw, prelude::*, subclass::prelude::*, Align};
 use std::cell::RefCell;
+use std::rc::Rc;
 
 // ANCHOR: custom_button
 // Object holding the state
@@ -133,13 +134,24 @@ impl ObjectImpl for ColorBadge {
             .bidirectional()
             .build();
 
+        let last_style: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+
         obj.connect_css_style_notify(clone!(
             #[strong]
             obj,
             #[strong]
             label1,
+            #[strong]
+            last_style,
             move |_| {
+                match last_style.borrow().clone() {
+                    Some(t) => {
+                        label1.remove_css_class(&t);
+                    }
+                    None => {}
+                }
                 label1.add_css_class(&obj.css_style());
+                *last_style.borrow_mut() = Some(obj.css_style());
             }
         ));
 
