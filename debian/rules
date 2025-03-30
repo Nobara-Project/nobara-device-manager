@@ -15,7 +15,7 @@ endif
 	dh ${@}
 
 override_dh_auto_install:
-	mkdir -p debian/cfhdb/usr/bin/
+	mkdir -p debian/pika-device-manager/usr/bin/
 	cargo fetch
 	cargo build --release
 	cp -vf target/release/pika-device-manager debian/pika-device-manager/usr/bin/
