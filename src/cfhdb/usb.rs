@@ -1,10 +1,6 @@
-use crate::config::*;
-use crate::ChannelMsg;
+use crate::{config::*, ChannelMsg};
 use libcfhdb::usb::*;
-use std::{
-    collections::HashMap, fs, io::Write, ops::Deref, os::unix::fs::PermissionsExt, path::Path,
-    process::exit,
-};
+use std::{collections::HashMap, fs, path::Path};
 
 pub fn get_usb_devices(
     profiles: &Vec<CfhdbUsbProfile>,

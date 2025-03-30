@@ -1,10 +1,6 @@
 use crate::build_ui::colored_circle;
 use glib::{clone, translate::ToGlibPtr, Properties};
-use gtk::cairo;
-use gtk::gdk;
-use gtk::glib;
-use gtk::pango;
-use gtk::{ffi::gtk_widget_queue_draw, prelude::*, subclass::prelude::*};
+use gtk::{ffi::gtk_widget_queue_draw, gdk, glib, prelude::*, subclass::prelude::*};
 use std::cell::RefCell;
 
 // ANCHOR: custom_button
@@ -46,6 +42,7 @@ fn redraw_widget(widget: &gtk::Widget) {
 #[glib::derived_properties]
 impl ObjectImpl for ColoredCircle {
     fn constructed(&self) {
+        #![allow(deprecated)]
         self.parent_constructed();
 
         // Bind label to number

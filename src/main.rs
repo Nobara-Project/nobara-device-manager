@@ -1,15 +1,10 @@
 mod config;
 
-use adw::prelude::*;
-use adw::*;
+use adw::{prelude::*, *};
 use gdk::Display;
-/// Use all gtk4 libraries (gtk4 -> gtk because cargo)
-/// Use all libadwaita libraries (libadwaita -> adw because cargo)
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
-use libcfhdb::pci::CfhdbPciDevice;
-use libcfhdb::usb::CfhdbUsbDevice;
-use std::collections::HashMap;
-use std::env;
+use libcfhdb::{pci::CfhdbPciDevice, usb::CfhdbUsbDevice};
+use std::{collections::HashMap, env};
 
 use config::APP_ID;
 

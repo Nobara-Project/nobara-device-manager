@@ -1,13 +1,9 @@
 use crate::build_ui::color_badge;
 use glib::{clone, translate::ToGlibPtr, Properties};
-use gtk::cairo;
-use gtk::gdk;
-use gtk::glib;
-use gtk::pango;
-use gtk::SizeGroup;
-use gtk::{ffi::gtk_widget_queue_draw, prelude::*, subclass::prelude::*, Align};
-use std::cell::RefCell;
-use std::rc::Rc;
+use gtk::{
+    ffi::gtk_widget_queue_draw, gdk, glib, prelude::*, subclass::prelude::*, Align, SizeGroup,
+};
+use std::{cell::RefCell, rc::Rc};
 
 // ANCHOR: custom_button
 // Object holding the state
@@ -43,10 +39,6 @@ impl ObjectSubclass for ColorBadge {
     fn class_init(gtk_class: &mut Self::Class) {
         gtk_class.set_layout_manager_type::<gtk::BinLayout>();
     }
-}
-
-fn calculate_radius(w: f64, h: f64) -> f64 {
-    std::cmp::min(w.round() as i64, (h - 1.0).round() as i64) as f64
 }
 
 fn redraw_widget(widget: &gtk::Widget) {

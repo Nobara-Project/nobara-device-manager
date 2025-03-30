@@ -1,32 +1,22 @@
-use crate::build_ui::color_badge::ColorBadge;
-use crate::build_ui::loading::run_in_lock_script;
-use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
-use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
-use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
-use crate::ChannelMsg;
-use adw::prelude::*;
-use adw::*;
-use gtk::ffi::GtkWidget;
-use gtk::gdk::RGBA;
-use gtk::glib::{clone, MainContext};
-use gtk::pango::Color;
-use gtk::Orientation::Vertical;
-use gtk::{
-    Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
-    ToggleButton, Widget,
+use crate::{
+    build_ui::color_badge::ColorBadge, build_ui::colored_circle::ColoredCircle,
+    config::distro_package_manager, ChannelMsg,
 };
+use adw::{prelude::*, *};
+use gtk::{
+    gdk::RGBA,
+    glib::{clone, MainContext},
+    Align, Orientation,
+    Orientation::Vertical,
+    ScrolledWindow, SelectionMode,
+};
+
 use libcfhdb::pci::{CfhdbPciDevice, CfhdbPciProfile};
-use libcfhdb::usb::CfhdbUsbDevice;
-use std::collections::HashMap;
-use std::io::Write;
-use std::os::unix::fs::PermissionsExt;
-use std::process::Command;
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::{process::Command, thread};
+
 use users::get_current_username;
 
-use super::colored_circle::{self, ColoredCircle};
-use super::{error_dialog, exec_duct_with_live_channel_stdout};
+use super::{error_dialog, run_in_lock_script};
 
 pub fn create_pci_class(
     window: &ApplicationWindow,
@@ -70,7 +60,7 @@ pub fn create_pci_class(
         .build();
     //
     for device in devices {
-        let device_status_indicator = colored_circle::ColoredCircle::new();
+        let device_status_indicator = ColoredCircle::new();
         device_status_indicator.set_width_request(15);
         device_status_indicator.set_height_request(15);
         let device_title = format!("{} - {}", &device.vendor_name, &device.device_name);
@@ -310,41 +300,65 @@ fn pci_device_page(
         .unwrap_or_default();
     profiles.sort_by_key(|x| x.priority);
 
-    control_button_start_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
-        match device.start_device() {
-            Ok(_) => update_device_status_action.activate(None),
-            Err(e) => {
-                error_dialog(window.clone(), &t!("device_start_error"), &e.to_string())
+    control_button_start_device_button.connect_clicked(clone!(
+        #[strong]
+        device,
+        #[strong]
+        window,
+        #[strong]
+        update_device_status_action,
+        move |_| {
+            match device.start_device() {
+                Ok(_) => update_device_status_action.activate(None),
+                Err(e) => error_dialog(window.clone(), &t!("device_start_error"), &e.to_string()),
             }
         }
-    }));
+    ));
 
-    control_button_enable_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
-        match device.enable_device() {
-            Ok(_) => update_device_status_action.activate(None),
-            Err(e) => {
-                error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string())
+    control_button_enable_device_button.connect_clicked(clone!(
+        #[strong]
+        device,
+        #[strong]
+        window,
+        #[strong]
+        update_device_status_action,
+        move |_| {
+            match device.enable_device() {
+                Ok(_) => update_device_status_action.activate(None),
+                Err(e) => error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string()),
             }
         }
-    }));
+    ));
 
-    control_button_stop_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
-        match device.stop_device() {
-            Ok(_) => update_device_status_action.activate(None),
-            Err(e) => {
-                error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string())
+    control_button_stop_device_button.connect_clicked(clone!(
+        #[strong]
+        device,
+        #[strong]
+        window,
+        #[strong]
+        update_device_status_action,
+        move |_| {
+            match device.stop_device() {
+                Ok(_) => update_device_status_action.activate(None),
+                Err(e) => error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string()),
             }
         }
-    }));
+    ));
 
-    control_button_disable_device_button.connect_clicked(clone!(#[strong] device, #[strong] window, #[strong] update_device_status_action,move |_| {
-        match device.disable_device() {
-            Ok(_) => update_device_status_action.activate(None),
-            Err(e) => {
-                error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string())
+    control_button_disable_device_button.connect_clicked(clone!(
+        #[strong]
+        device,
+        #[strong]
+        window,
+        #[strong]
+        update_device_status_action,
+        move |_| {
+            match device.disable_device() {
+                Ok(_) => update_device_status_action.activate(None),
+                Err(e) => error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string()),
             }
         }
-    }));
+    ));
 
     for profile in profiles {
         let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
@@ -427,7 +441,12 @@ fn pci_device_page(
             #[strong]
             update_device_status_action,
             move |_| {
-                profile_modify(window.clone(), &profile, "install", &update_device_status_action);
+                profile_modify(
+                    window.clone(),
+                    &profile,
+                    "install",
+                    &update_device_status_action,
+                );
             }
         ));
         profile_remove_button.connect_clicked(clone!(
@@ -438,7 +457,12 @@ fn pci_device_page(
             #[strong]
             update_device_status_action,
             move |_| {
-                profile_modify(window.clone(), &profile, "remove", &update_device_status_action);
+                profile_modify(
+                    window.clone(),
+                    &profile,
+                    "remove",
+                    &update_device_status_action,
+                );
             }
         ));
         update_device_status_action.connect_activate(clone!(move |_, _| {
@@ -472,7 +496,10 @@ fn pci_device_page(
             let (color, tooltip) = match (enabled, started) {
                 (true, true) => (RGBA::GREEN, &t!("device_status_active_enabled")),
                 (false, true) => (RGBA::BLUE, &t!("device_status_active_disabled")),
-                (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), &t!("device_status_inactive_enabled")),
+                (true, false) => (
+                    RGBA::new(60.0, 255.0, 0.0, 1.0),
+                    &t!("device_status_inactive_enabled"),
+                ),
                 (false, false) => (RGBA::RED, &t!("device_status_inactive_disabled")),
             };
             device_status_indicator.set_color(color);
@@ -484,21 +511,23 @@ fn pci_device_page(
             control_button_enable_device_button.set_sensitive(!enabled);
             control_button_disable_device_button.set_sensitive(enabled);
 
-            let device_started_i18n = if started { &t!("status_yes") } else { &t!("status_no") };
-            let device_enabled_i18n = if enabled { &t!("status_yes") } else { &t!("status_no") };
-            started_color_badge.set_label1(textwrap::fill(
-                device_started_i18n,
-                10,
-            ));
+            let device_started_i18n = if started {
+                &t!("status_yes")
+            } else {
+                &t!("status_no")
+            };
+            let device_enabled_i18n = if enabled {
+                &t!("status_yes")
+            } else {
+                &t!("status_no")
+            };
+            started_color_badge.set_label1(textwrap::fill(device_started_i18n, 10));
             started_color_badge.set_css_style(if started {
                 "background-accent-bg"
             } else {
                 "background-red-bg"
             });
-            enabled_color_badge.set_label1(textwrap::fill(
-                device_enabled_i18n,
-                10,
-            ));
+            enabled_color_badge.set_label1(textwrap::fill(device_enabled_i18n, 10));
             enabled_color_badge.set_css_style(if enabled {
                 "background-accent-bg"
             } else {
@@ -528,7 +557,12 @@ fn pci_device_page(
     content_box
 }
 
-fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreation: &str, update_device_status_action: &gio::SimpleAction) {
+fn profile_modify(
+    window: ApplicationWindow,
+    profile: &CfhdbPciProfile,
+    opreation: &str,
+    update_device_status_action: &gio::SimpleAction,
+) {
     let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
     let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
 
@@ -589,7 +623,7 @@ fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreatio
                     Some(a) => {
                         let package_list = a.join(" ");
                         let modify_command =
-                            format!("apt-get --assume-no {} {}", &string_opreation, package_list);
+                            distro_package_manager(&string_opreation, &package_list);
                         run_in_lock_script(
                             &log_loop_sender,
                             &format!("#! /bin/bash\nset -e\n{}\n{}", modify_command, t),
@@ -606,7 +640,7 @@ fn profile_modify(window: ApplicationWindow, profile: &CfhdbPciProfile, opreatio
                     Some(a) => {
                         let package_list = a.join(" ");
                         let modify_command =
-                            format!("apt-get --assume-no {} {}", &string_opreation, package_list);
+                            distro_package_manager(&string_opreation, &package_list);
                         run_in_lock_script(
                             &log_loop_sender,
                             &format!("#! /bin/bash\nset -e\n{}", modify_command),

@@ -1,32 +1,20 @@
-use crate::cfhdb::pci::{get_pci_devices, get_pci_profiles_from_url};
-use crate::cfhdb::usb::{get_usb_devices, get_usb_profiles_from_url};
-use crate::config::{APP_GIT, APP_ICON, APP_ID, VERSION};
+use crate::config::{APP_GIT, APP_ICON, VERSION};
 use crate::ChannelMsg;
 use adw::prelude::*;
 use adw::*;
-use duct::cmd;
-use gtk::ffi::GtkWidget;
-use gtk::gdk::RGBA;
 use gtk::glib::{clone, MainContext};
-use gtk::pango::Color;
-use gtk::Orientation::Vertical;
-use gtk::{
-    Align, Orientation, PolicyType, ScrolledWindow, SelectionMode, Stack, StackTransitionType,
-    ToggleButton, Widget,
-};
+use gtk::{Align, Orientation, PolicyType, Stack, StackTransitionType, ToggleButton};
 use libcfhdb::pci::CfhdbPciDevice;
 use libcfhdb::usb::CfhdbUsbDevice;
 use pci::create_pci_class;
-use usb::create_usb_class;
 use std::collections::HashMap;
-use std::io::BufRead;
 use std::io::BufReader;
+use std::io::{BufRead, Write};
+use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
-use std::sync::{Arc, Mutex};
 use std::thread;
-
-use super::color_badge::ColorBadge;
-use super::colored_circle::{self, ColoredCircle};
+use usb::create_usb_class;
+use users::get_current_username;
 
 mod pci;
 mod usb;
@@ -97,7 +85,13 @@ pub fn main_content(
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
-            &create_pci_class(&window, &devices, &class_i18n, &theme_changed_action, &update_device_status_action),
+            &create_pci_class(
+                &window,
+                &devices,
+                &class_i18n,
+                &theme_changed_action,
+                &update_device_status_action,
+            ),
             Some(&class),
             &class_i18n,
         );
@@ -111,7 +105,9 @@ pub fn main_content(
             },
             class.clone(),
             class_i18n,
-            get_icon_for_class(&class).unwrap_or("dialog-question-symbolic").into(),
+            get_icon_for_class(&class)
+                .unwrap_or("dialog-question-symbolic")
+                .into(),
             &null_toggle_sidebar,
         ));
     }
@@ -120,7 +116,13 @@ pub fn main_content(
         let class = format!("usb_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
-            &create_usb_class(&window, &devices, &class_i18n, &theme_changed_action, &update_device_status_action),
+            &create_usb_class(
+                &window,
+                &devices,
+                &class_i18n,
+                &theme_changed_action,
+                &update_device_status_action,
+            ),
             Some(&class),
             &class_i18n,
         );
@@ -134,16 +136,15 @@ pub fn main_content(
             },
             class.clone(),
             class_i18n,
-            get_icon_for_class(&class).unwrap_or("dialog-question-symbolic").into(),
+            get_icon_for_class(&class)
+                .unwrap_or("dialog-question-symbolic")
+                .into(),
             &null_toggle_sidebar,
         ));
     }
 
-    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(
-        &window_stack,
-        &pci_buttons,
-        &usb_buttons,
-    )));
+    main_content_overlay_split_view
+        .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
@@ -168,7 +169,6 @@ pub fn main_content(
 }
 
 fn main_content_sidebar(
-    stack: &gtk::Stack,
     pci_buttons: &Vec<ToggleButton>,
     usb_buttons: &Vec<ToggleButton>,
 ) -> adw::ToolbarView {
@@ -202,7 +202,11 @@ fn main_content_sidebar(
     for button in pci_buttons {
         main_content_sidebar_box.append(button);
     }
-    main_content_sidebar_box.append(&gtk::Separator::builder().orientation(Orientation::Horizontal).build());
+    main_content_sidebar_box.append(
+        &gtk::Separator::builder()
+            .orientation(Orientation::Horizontal)
+            .build(),
+    );
     main_content_sidebar_box.append(&usb_label);
     for button in usb_buttons {
         main_content_sidebar_box.append(button);
@@ -411,11 +415,48 @@ pub fn error_dialog(window: ApplicationWindow, heading: &str, error: &str) {
         .height_request(200)
         .heading(heading)
         .build();
-    error_dialog.add_response(
-        "error_dialog_ok",
-        &t!("error_dialog_ok_label").to_string(),
-    );
+    error_dialog.add_response("error_dialog_ok", &t!("error_dialog_ok_label").to_string());
     error_dialog.present(Some(&window));
+}
+
+pub fn run_in_lock_script(log_loop_sender: &async_channel::Sender<ChannelMsg>, script: &str) {
+    let file_path = "/var/cache/cfhdb/script_lock.sh";
+    let file_fs_path = std::path::Path::new(file_path);
+    if file_fs_path.exists() {
+        std::fs::remove_file(file_fs_path).unwrap();
+    }
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(file_path)
+            .expect(&(file_path.to_string() + "cannot be read"));
+        file.write_all(script.as_bytes())
+            .expect(&(file_path.to_string() + "cannot be written to"));
+        let mut perms = file
+            .metadata()
+            .expect(&(file_path.to_string() + "cannot be read"))
+            .permissions();
+        perms.set_mode(0o777);
+        std::fs::set_permissions(file_path, perms)
+            .expect(&(file_path.to_string() + "cannot be written to"));
+    }
+    let final_cmd = if get_current_username().unwrap() == "root" {
+        duct::cmd!(file_path)
+    } else {
+        duct::cmd!("pkexec", file_path)
+    };
+    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
+        Ok(_) => {
+            log_loop_sender
+                .send_blocking(ChannelMsg::SuccessMsg)
+                .unwrap();
+        }
+        Err(_) => {
+            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
+        }
+    }
 }
 
 pub fn get_icon_for_class(class: &str) -> Option<&str> {
@@ -503,7 +544,7 @@ pub fn get_icon_for_class(class: &str) -> Option<&str> {
         "pci_class_name_0B80" => Some("cpu-symbolic"),
         "pci_class_name_0C00" => Some("serial-port-symbolic"),
         "pci_class_name_0C01" => Some("serial-port-symbolic"),
-        "pci_class_name_0C02" => Some("serial-port-symbolic"), 
+        "pci_class_name_0C02" => Some("serial-port-symbolic"),
         "pci_class_name_0C03" => Some("drive-harddisk-usb-symbolic"),
         "pci_class_name_0C04" => Some("network-wired-symbolic"),
         "pci_class_name_0C05" => Some("cpu-symbolic"),
@@ -566,6 +607,6 @@ pub fn get_icon_for_class(class: &str) -> Option<&str> {
         "usb_class_name_FE" => Some("dialog-question-symbolic"),
         "usb_class_name_FF" => Some("dialog-question-symbolic"),
         //
-        _ => None
+        _ => None,
     }
 }
