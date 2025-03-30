@@ -196,7 +196,7 @@ fn usb_device_page(
     color_badges_vec.push(&vendor_id_color_badge);
 
     let product_id_color_badge = ColorBadge::new();
-    product_id_color_badge.set_label0(textwrap::fill("TEST_PRODUCT_ID", 10));
+    product_id_color_badge.set_label0(textwrap::fill(&t!("device_product_id"), 10));
     product_id_color_badge.set_css_style("background-accent-bg");
     product_id_color_badge.set_group_size0(&color_badges_size_group0);
     product_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -250,7 +250,7 @@ fn usb_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text("TEST_DEVICE_CONTROL_START")
+        .tooltip_text(t!("device_control_start"))
         .build();
     let control_button_stop_device_button = gtk::Button::builder()
         .child(
@@ -261,7 +261,7 @@ fn usb_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text("TEST_DEVICE_CONTROL_STOP")
+        .tooltip_text(t!("device_control_stop"))
         .build();
     let control_button_enable_device_button = gtk::Button::builder()
         .child(
@@ -272,7 +272,7 @@ fn usb_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text("TEST_DEVICE_CONTROL_ENABLE")
+        .tooltip_text(t!("device_control_enable"))
         .build();
     let control_button_disable_device_button = gtk::Button::builder()
         .child(
@@ -283,7 +283,7 @@ fn usb_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text("TEST_DEVICE_CONTROL_DISABLE")
+        .tooltip_text(t!("device_control_disable"))
         .build();
 
     let available_profiles_list_row = adw::PreferencesGroup::builder()
@@ -291,8 +291,8 @@ fn usb_device_page(
         .margin_bottom(20)
         .margin_start(20)
         .margin_end(20)
-        .title("TEST_AV_PF_TITLE")
-        .description("TEST_AV_PF_SUBTITLE")
+        .title(t!("available_profiles_title"))
+        .description(t!("available_profiles_subtitle"))
         .vexpand(true)
         .hexpand(true)
         .build();
@@ -312,7 +312,7 @@ fn usb_device_page(
         match device.start_device() {
             Ok(_) => update_device_status_action.activate(None),
             Err(e) => {
-                error_dialog(window.clone(), "TEST_DEVICE_START_ERROR", &e.to_string())
+                error_dialog(window.clone(), &t!("device_start_error"), &e.to_string())
             }
         }
     }));
@@ -321,7 +321,7 @@ fn usb_device_page(
         match device.enable_device() {
             Ok(_) => update_device_status_action.activate(None),
             Err(e) => {
-                error_dialog(window.clone(), "TEST_DEVICE_ENABLE_ERROR", &e.to_string())
+                error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string())
             }
         }
     }));
@@ -330,7 +330,7 @@ fn usb_device_page(
         match device.stop_device() {
             Ok(_) => update_device_status_action.activate(None),
             Err(e) => {
-                error_dialog(window.clone(), "TEST_DEVICE_STOP_ERROR", &e.to_string())
+                error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string())
             }
         }
     }));
@@ -339,7 +339,7 @@ fn usb_device_page(
         match device.disable_device() {
             Ok(_) => update_device_status_action.activate(None),
             Err(e) => {
-                error_dialog(window.clone(), "TEST_DEVICE_DISABLE_ERROR", &e.to_string())
+                error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string())
             }
         }
     }));
@@ -388,19 +388,19 @@ fn usb_device_page(
         profile_expander_row.set_subtitle(&profile.codename);
         //
         let color_badge_experimental = ColorBadge::new();
-        color_badge_experimental.set_label0(textwrap::fill("TEST_EXPERIMENTAL", 10));
+        color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
         if profile.experimental {
-            color_badge_experimental.set_label1("TEST_YES");
+            color_badge_experimental.set_label1(t!("status_yes"));
             color_badge_experimental.set_css_style("background-red-bg");
         } else {
-            color_badge_experimental.set_label1("TEST_NO");
+            color_badge_experimental.set_label1(t!("status_no"));
             color_badge_experimental.set_css_style("background-accent-bg");
         }
         color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
         color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
         color_badge_experimental.set_theme_changed_action(theme_changed_action);
         let color_badge_license = ColorBadge::new();
-        color_badge_license.set_label0(textwrap::fill("TEST_LICENSE", 10));
+        color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
         color_badge_license.set_label1(profile.license.clone());
         color_badge_license.set_css_style("background-accent-bg");
         color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
@@ -468,10 +468,10 @@ fn usb_device_page(
                 updated_device.enabled,
             );
             let (color, tooltip) = match (enabled, started) {
-                (true, true) => (RGBA::GREEN, "TEST_DEVICE_ACTIVE_ENABLED"),
-                (false, true) => (RGBA::BLUE, "TEST_DEVICE_ACTIVE_DISABLED"),
-                (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), "TEST_DEVICE_STOP_ENABLED"),
-                (false, false) => (RGBA::RED, "TEST_DEVICE_STOP_DISABLED"),
+                (true, true) => (RGBA::GREEN, &t!("device_status_active_enabled")),
+                (false, true) => (RGBA::BLUE, &t!("device_status_active_disabled")),
+                (true, false) => (RGBA::new(60.0, 255.0, 0.0, 1.0), &t!("device_status_inactive_enabled")),
+                (false, false) => (RGBA::RED, &t!("device_status_inactive_disabled")),
             };
             device_status_indicator.set_color(color);
             device_status_indicator.set_tooltip_text(Some(tooltip));
@@ -482,8 +482,10 @@ fn usb_device_page(
             control_button_enable_device_button.set_sensitive(!enabled);
             control_button_disable_device_button.set_sensitive(enabled);
 
+            let device_started_i18n = if started { &t!("status_yes") } else { &t!("status_no") };
+            let device_enabled_i18n = if enabled { &t!("status_yes") } else { &t!("status_no") };
             started_color_badge.set_label1(textwrap::fill(
-                if started { "TEST_YES" } else { "TEST_NO" },
+                device_started_i18n,
                 10,
             ));
             started_color_badge.set_css_style(if started {
@@ -492,7 +494,7 @@ fn usb_device_page(
                 "background-red-bg"
             });
             enabled_color_badge.set_label1(textwrap::fill(
-                if enabled { "TEST_YES" } else { "TEST_NO" },
+                device_enabled_i18n,
                 10,
             ));
             enabled_color_badge.set_css_style(if enabled {

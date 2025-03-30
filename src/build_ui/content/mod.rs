@@ -196,8 +196,8 @@ fn main_content_sidebar(
             .build(),
     );
 
-    let pci_label = gtk::Label::new(Some("PCI_TEST"));
-    let usb_label = gtk::Label::new(Some("USB_TEST"));
+    let pci_label = gtk::Label::new(Some(&t!("pci_devices")));
+    let usb_label = gtk::Label::new(Some(&t!("usb_devices")));
     main_content_sidebar_box.append(&pci_label);
     for button in pci_buttons {
         main_content_sidebar_box.append(button);
