@@ -685,7 +685,7 @@ fn profile_modify(
                                 .set_response_enabled("profile_modify_dialog_reboot", true);
                         }
                         profile_modify_dialog
-                            .set_response_enabled("profile_modify_dialog_reboot", true);
+                            .set_response_enabled("profile_modify_dialog_ok", true);
                         profile_modify_dialog.set_body(
                             &t!(format!(
                                 "profile_{}_dialog_body_successful",
