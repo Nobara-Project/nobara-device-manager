@@ -468,7 +468,11 @@ fn pci_device_page(
         update_device_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.get_status();
             profile_install_button.set_sensitive(!profile_status);
-            profile_remove_button.set_sensitive(profile_status);
+            if profile.removable {
+                profile_remove_button.set_sensitive(profile_status);
+            } else {
+                profile_remove_button.set_sensitive(false);
+            }
             profile_status_icon.set_visible(profile_status);
         }));
     }
@@ -673,7 +677,7 @@ fn profile_modify(
                         &("\n".to_string() + &line),
                     ),
                     ChannelMsg::SuccessMsg => {
-                        if get_current_username().unwrap() == "pikaos" {
+                        if get_current_username().unwrap() == "liveuser" {
                             profile_modify_dialog
                                 .set_response_enabled("profile_modify_dialog_reboot", false);
                         } else {
@@ -681,7 +685,7 @@ fn profile_modify(
                                 .set_response_enabled("profile_modify_dialog_reboot", true);
                         }
                         profile_modify_dialog
-                            .set_response_enabled("profile_modify_dialog_reboot", true);
+                            .set_response_enabled("profile_modify_dialog_ok", true);
                         profile_modify_dialog.set_body(
                             &t!(format!(
                                 "profile_{}_dialog_body_successful",

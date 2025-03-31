@@ -322,7 +322,7 @@ where
             }
 
             let check_internet_connection_cli = Command::new("ping")
-                .arg("iso.pika-os.com")
+                .arg("iso.nobara-os.com")
                 .arg("-c 1")
                 .output()
                 .expect("failed to execute process");

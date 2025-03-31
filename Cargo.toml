@@ -1,5 +1,5 @@
 [package]
-name = "pika-device-manager"
+name = "nobara-device-manager"
 version = "0.1.0"
 edition = "2021"
 
