@@ -471,7 +471,11 @@ fn usb_device_page(
         update_device_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.get_status();
             profile_install_button.set_sensitive(!profile_status);
-            profile_remove_button.set_sensitive(profile_status);
+            if profile.removable {
+                profile_remove_button.set_sensitive(profile_status);
+            } else {
+                profile_remove_button.set_sensitive(false);
+            }
             profile_status_icon.set_visible(profile_status);
         }));
     }
