@@ -65,7 +65,7 @@ pub fn main_content(
         let b_class = t!(format!("pci_class_name_{}", b.0))
             .to_string()
             .to_lowercase();
-        a_class.cmp(&b_class)
+        b_class.cmp(&a_class)
     });
 
     let mut hashmap_usb: Vec<(&String, &Vec<CfhdbUsbDevice>)> = hashmap_usb.iter().collect();
@@ -76,7 +76,7 @@ pub fn main_content(
         let b_class = t!(format!("usb_class_name_{}", b.0))
             .to_string()
             .to_lowercase();
-        a_class.cmp(&b_class)
+        b_class.cmp(&a_class)
     });
 
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
