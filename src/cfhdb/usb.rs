@@ -1,22 +1,27 @@
 use crate::{config::*, ChannelMsg};
 use libcfhdb::usb::*;
-use std::{collections::HashMap, fs, path::Path, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 pub struct PreCheckedUsbDevice {
     pub device: CfhdbUsbDevice,
-    pub profiles:Vec<Arc<PreCheckedUsbProfile>>
+    pub profiles: Vec<Arc<PreCheckedUsbProfile>>,
 }
 
 pub struct PreCheckedUsbProfile {
     profile: CfhdbUsbProfile,
-    installed: Arc<Mutex<bool>>
+    installed: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedUsbProfile {
     pub fn new(profile: CfhdbUsbProfile) -> Self {
         Self {
             profile,
-            installed: Arc::new(Mutex::new(false))
+            installed: Arc::new(Mutex::new(false)),
         }
     }
     pub fn profile(&self) -> CfhdbUsbProfile {
@@ -36,19 +41,27 @@ pub fn get_usb_devices(
     match CfhdbUsbDevice::get_devices() {
         Some(devices) => {
             let hashmap = CfhdbUsbDevice::create_class_hashmap(devices);
-            return Some(hashmap.iter().map(move |x|{
-                let mut pre_checked_devices = vec![];
-                for  i in x.1 {
-                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
-                }
-                (x.0.clone(), pre_checked_devices)
-            }).collect())
+            return Some(
+                hashmap
+                    .iter()
+                    .map(move |x| {
+                        let mut pre_checked_devices = vec![];
+                        for i in x.1 {
+                            pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
+                        }
+                        (x.0.clone(), pre_checked_devices)
+                    })
+                    .collect(),
+            );
         }
         None => return None,
     }
 }
 
-fn get_pre_checked_device(profile_data: &[Arc<PreCheckedUsbProfile>], device: CfhdbUsbDevice) -> PreCheckedUsbDevice {
+fn get_pre_checked_device(
+    profile_data: &[Arc<PreCheckedUsbProfile>],
+    device: CfhdbUsbDevice,
+) -> PreCheckedUsbDevice {
     let mut available_profiles = vec![];
     for profile_arc in profile_data.iter() {
         let profile = profile_arc.profile();
@@ -77,7 +90,7 @@ fn get_pre_checked_device(profile_data: &[Arc<PreCheckedUsbProfile>], device: Cf
     }
     PreCheckedUsbDevice {
         device,
-        profiles: available_profiles
+        profiles: available_profiles,
     }
 }
 
@@ -250,6 +263,7 @@ pub fn get_usb_profiles_from_url(
             };
             let experimental = profile["experimental"].as_bool().unwrap_or_default();
             let removable = profile["removable"].as_bool().unwrap_or_default();
+            let veiled = profile["veiled"].as_bool().unwrap_or_default();
             let priority = profile["priority"].as_i64().unwrap_or_default();
             // Parse into the Struct
             let profile_struct = CfhdbUsbProfile {
@@ -269,6 +283,7 @@ pub fn get_usb_profiles_from_url(
                 remove_script,
                 experimental,
                 removable,
+                veiled,
                 priority: priority as i32,
             };
             profiles_array.push(profile_struct);

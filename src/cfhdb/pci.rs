@@ -1,22 +1,27 @@
 use crate::{config::*, ChannelMsg};
 use libcfhdb::pci::*;
-use std::{collections::HashMap, fs, path::Path, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 pub struct PreCheckedPciDevice {
     pub device: CfhdbPciDevice,
-    pub profiles:Vec<Arc<PreCheckedPciProfile>>
+    pub profiles: Vec<Arc<PreCheckedPciProfile>>,
 }
 
 pub struct PreCheckedPciProfile {
     profile: CfhdbPciProfile,
-    installed: Arc<Mutex<bool>>
+    installed: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedPciProfile {
     pub fn new(profile: CfhdbPciProfile) -> Self {
         Self {
             profile,
-            installed: Arc::new(Mutex::new(false))
+            installed: Arc::new(Mutex::new(false)),
         }
     }
     pub fn profile(&self) -> CfhdbPciProfile {
@@ -36,19 +41,27 @@ pub fn get_pci_devices(
     match CfhdbPciDevice::get_devices() {
         Some(devices) => {
             let hashmap = CfhdbPciDevice::create_class_hashmap(devices);
-            return Some(hashmap.iter().map(move |x|{
-                let mut pre_checked_devices = vec![];
-                for  i in x.1 {
-                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
-                }
-                (x.0.clone(), pre_checked_devices)
-            }).collect())
+            return Some(
+                hashmap
+                    .iter()
+                    .map(move |x| {
+                        let mut pre_checked_devices = vec![];
+                        for i in x.1 {
+                            pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
+                        }
+                        (x.0.clone(), pre_checked_devices)
+                    })
+                    .collect(),
+            );
         }
         None => return None,
     }
 }
 
-fn get_pre_checked_device(profile_data: &[Arc<PreCheckedPciProfile>], device: CfhdbPciDevice) -> PreCheckedPciDevice {
+fn get_pre_checked_device(
+    profile_data: &[Arc<PreCheckedPciProfile>],
+    device: CfhdbPciDevice,
+) -> PreCheckedPciDevice {
     let mut available_profiles = vec![];
     for profile_arc in profile_data.iter() {
         let profile = profile_arc.profile();
@@ -77,7 +90,7 @@ fn get_pre_checked_device(profile_data: &[Arc<PreCheckedPciProfile>], device: Cf
     }
     PreCheckedPciDevice {
         device,
-        profiles: available_profiles
+        profiles: available_profiles,
     }
 }
 
@@ -250,6 +263,7 @@ pub fn get_pci_profiles_from_url(
             };
             let experimental = profile["experimental"].as_bool().unwrap_or_default();
             let removable = profile["removable"].as_bool().unwrap_or_default();
+            let veiled = profile["veiled"].as_bool().unwrap_or_default();
             let priority = profile["priority"].as_i64().unwrap_or_default();
             // Parse into the Struct
             let profile_struct = CfhdbPciProfile {
@@ -269,6 +283,7 @@ pub fn get_pci_profiles_from_url(
                 remove_script,
                 experimental,
                 removable,
+                veiled,
                 priority: priority as i32,
             };
             profiles_array.push(profile_struct);

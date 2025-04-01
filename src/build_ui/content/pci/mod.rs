@@ -1,5 +1,8 @@
 use crate::{
-    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle}, cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile}, config::distro_package_manager, ChannelMsg
+    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle},
+    cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile},
+    config::distro_package_manager,
+    ChannelMsg,
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -63,7 +66,10 @@ pub fn create_pci_class(
         let device_status_indicator = ColoredCircle::new();
         device_status_indicator.set_width_request(15);
         device_status_indicator.set_height_request(15);
-        let device_title = format!("{} - {}", &device_content.vendor_name, &device_content.device_name);
+        let device_title = format!(
+            "{} - {}",
+            &device_content.vendor_name, &device_content.device_name
+        );
         let device_navigation_page_toolbar = adw::ToolbarView::builder()
             .content(&pci_device_page(
                 &window,
@@ -284,6 +290,7 @@ fn pci_device_page(
         .margin_bottom(20)
         .margin_start(20)
         .margin_end(20)
+        .valign(gtk::Align::End)
         .title(t!("available_profiles_title"))
         .description(t!("available_profiles_subtitle"))
         .vexpand(true)
@@ -354,6 +361,9 @@ fn pci_device_page(
             }
         }
     ));
+
+    let mut normal_profiles = vec![];
+    let mut veiled_profiles = vec![];
 
     for profile in profiles.clone() {
         let profile_content = profile.profile();
@@ -427,7 +437,6 @@ fn pci_device_page(
         profile_content_row.add_suffix(&profile_action_box);
         profile_expander_row.add_row(&profile_content_row);
         rows_size_group.add_widget(&profile_action_box);
-        available_profiles_list_row.add(&profile_expander_row);
         //
         let profiles_rc = Rc::new(profiles.clone());
         profile_install_button.connect_clicked(clone!(
@@ -437,7 +446,7 @@ fn pci_device_page(
             update_device_status_action,
             #[strong]
             profile,
-            #[strong]     
+            #[strong]
             profiles_rc,
             move |_| {
                 profile_modify(
@@ -456,7 +465,7 @@ fn pci_device_page(
             update_device_status_action,
             #[strong]
             profile,
-            #[strong]     
+            #[strong]
             profiles_rc,
             move |_| {
                 profile_modify(
@@ -468,6 +477,13 @@ fn pci_device_page(
                 );
             }
         ));
+        //
+        if profile_content.veiled {
+            veiled_profiles.push(profile_expander_row);
+        } else {
+            normal_profiles.push(profile_expander_row);
+        }
+        //
         update_device_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
@@ -540,10 +556,14 @@ fn pci_device_page(
             } else {
                 "background-red-bg"
             });
-            driver_color_badge.set_label1(textwrap::fill(device_content.kernel_driver.as_str(), 10));
-            sysfs_busid_color_badge.set_label1(textwrap::fill(&device_content.sysfs_busid.as_str(), 10));
-            vendor_id_color_badge.set_label1(textwrap::fill(&device_content.vendor_id.as_str(), 10));
-            device_id_color_badge.set_label1(textwrap::fill(&device_content.device_id.as_str(), 10));
+            driver_color_badge
+                .set_label1(textwrap::fill(device_content.kernel_driver.as_str(), 10));
+            sysfs_busid_color_badge
+                .set_label1(textwrap::fill(&device_content.sysfs_busid.as_str(), 10));
+            vendor_id_color_badge
+                .set_label1(textwrap::fill(&device_content.vendor_id.as_str(), 10));
+            device_id_color_badge
+                .set_label1(textwrap::fill(&device_content.device_id.as_str(), 10));
         }
     ));
 
@@ -559,7 +579,35 @@ fn pci_device_page(
 
     content_box.append(&color_badges_grid);
     content_box.append(&device_controls_box);
+    for widget in normal_profiles {
+        available_profiles_list_row.add(&widget);
+    }
     content_box.append(&available_profiles_list_row);
+    if !veiled_profiles.is_empty() {
+        let veiled_profiles_list_row = gtk::ListBox::builder()
+            .vexpand(true)
+            .hexpand(true)
+            .margin_top(20)
+            .margin_end(20)
+            .build();
+        veiled_profiles_list_row.add_css_class("boxed-list");
+        let label = gtk::Label::new(Some(&t!("viel_expander_label")));
+        label.add_css_class("title-1");
+        let veil_expander = gtk::Expander::builder()
+            .child(&veiled_profiles_list_row)
+            .valign(gtk::Align::Start)
+            .vexpand(true)
+            .label_widget(&label)
+            .margin_top(20)
+            .margin_bottom(20)
+            .margin_start(20)
+            .margin_end(20)
+            .build();
+        for widget in veiled_profiles {
+            veiled_profiles_list_row.append(&widget);
+        }
+        content_box.append(&veil_expander);
+    }
 
     content_box
 }
@@ -711,7 +759,7 @@ fn profile_modify(
                         profile_modify_dialog
                             .set_response_enabled("profile_modify_dialog_reboot", false);
                     }
-                    ChannelMsg::SuccessMsgDeviceFetch(_, _)  | ChannelMsg::UpdateMsg => {
+                    ChannelMsg::SuccessMsgDeviceFetch(_, _) | ChannelMsg::UpdateMsg => {
                         panic!();
                     }
                 }
