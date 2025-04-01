@@ -10,8 +10,7 @@ use gtk::{
     ScrolledWindow, SelectionMode,
 };
 
-use libcfhdb::pci::{CfhdbPciDevice, CfhdbPciProfile};
-use serde::de;
+use libcfhdb::pci::CfhdbPciDevice;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
 
 use users::get_current_username;
@@ -435,12 +434,15 @@ fn pci_device_page(
             #[strong]
             window,
             #[strong]
+            update_device_status_action,
+            #[strong]
             profile,
             #[strong]     
             profiles_rc,
             move |_| {
                 profile_modify(
                     window.clone(),
+                    &update_device_status_action,
                     &profile,
                     &profiles_rc,
                     "install",
@@ -451,12 +453,15 @@ fn pci_device_page(
             #[strong]
             window,
             #[strong]
+            update_device_status_action,
+            #[strong]
             profile,
             #[strong]     
             profiles_rc,
             move |_| {
                 profile_modify(
                     window.clone(),
+                    &update_device_status_action,
                     &profile,
                     &profiles_rc,
                     "install",
@@ -561,6 +566,7 @@ fn pci_device_page(
 
 fn profile_modify(
     window: ApplicationWindow,
+    update_device_status_action: &gio::SimpleAction,
     profile: &Arc<PreCheckedPciProfile>,
     all_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>,
     opreation: &str,
@@ -720,6 +726,8 @@ fn profile_modify(
         profile_modify_dialog,
         #[strong]
         all_profiles,
+        #[strong]
+        update_device_status_action,
         move |choice: glib::GString| {
             match choice.as_str() {
                 "profile_modify_dialog_reboot" => {
@@ -733,6 +741,7 @@ fn profile_modify(
                     for a_profile in all_profiles.iter() {
                         a_profile.update_installed();
                     }
+                    update_device_status_action.activate(None);
                 }
             }
         }

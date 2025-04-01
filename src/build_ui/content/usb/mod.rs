@@ -1,6 +1,5 @@
 use crate::{
-    build_ui::color_badge::ColorBadge, build_ui::colored_circle::ColoredCircle,
-    config::distro_package_manager, ChannelMsg,
+    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle}, cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile}, config::distro_package_manager, ChannelMsg
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -11,8 +10,8 @@ use gtk::{
     ScrolledWindow, SelectionMode,
 };
 
-use libcfhdb::usb::{CfhdbUsbDevice, CfhdbUsbProfile};
-use std::{process::Command, thread};
+use libcfhdb::usb::CfhdbUsbDevice;
+use std::{process::Command, rc::Rc, sync::Arc, thread};
 
 use users::get_current_username;
 
@@ -20,7 +19,7 @@ use super::{error_dialog, run_in_lock_script};
 
 pub fn create_usb_class(
     window: &ApplicationWindow,
-    devices: &Vec<CfhdbUsbDevice>,
+    devices: &Vec<PreCheckedUsbDevice>,
     class: &str,
     theme_changed_action: &gio::SimpleAction,
     update_device_status_action: &gio::SimpleAction,
@@ -60,12 +59,13 @@ pub fn create_usb_class(
         .build();
     //
     for device in devices {
+        let device_content = &device.device;
         let device_status_indicator = ColoredCircle::new();
         device_status_indicator.set_width_request(15);
         device_status_indicator.set_height_request(15);
         let device_title = format!(
             "{} - {}",
-            &device.manufacturer_string_index, &device.product_string_index
+            &device_content.manufacturer_string_index, &device_content.product_string_index
         );
         let device_navigation_page_toolbar = adw::ToolbarView::builder()
             .content(&usb_device_page(
@@ -89,7 +89,7 @@ pub fn create_usb_class(
         navigation_view.add(&device_navigation_page);
         let action_row = adw::ActionRow::builder()
             .title(&device_title)
-            .subtitle(&device.sysfs_busid)
+            .subtitle(&device_content.sysfs_busid)
             .activatable(true)
             .build();
         action_row.connect_activated(clone!(
@@ -109,11 +109,12 @@ pub fn create_usb_class(
 
 fn usb_device_page(
     window: &ApplicationWindow,
-    device: &CfhdbUsbDevice,
+    device: &PreCheckedUsbDevice,
     theme_changed_action: &gio::SimpleAction,
     update_device_status_action: &gio::SimpleAction,
     device_status_indicator: &ColoredCircle,
 ) -> gtk::Box {
+    let device_content = &device.device;
     let content_box = gtk::Box::builder()
         .hexpand(true)
         .vexpand(true)
@@ -294,24 +295,18 @@ fn usb_device_page(
 
     let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
-    let mut profiles = device
-        .available_profiles
-        .0
-        .lock()
-        .unwrap()
-        .clone()
-        .unwrap_or_default();
-    profiles.sort_by_key(|x| x.priority);
+    let mut profiles = device.profiles.clone();
+    profiles.sort_by_key(|x| x.profile().priority);
 
     control_button_start_device_button.connect_clicked(clone!(
         #[strong]
-        device,
+        device_content,
         #[strong]
         window,
         #[strong]
         update_device_status_action,
         move |_| {
-            match device.start_device() {
+            match device_content.start_device() {
                 Ok(_) => update_device_status_action.activate(None),
                 Err(e) => error_dialog(window.clone(), &t!("device_start_error"), &e.to_string()),
             }
@@ -320,13 +315,13 @@ fn usb_device_page(
 
     control_button_enable_device_button.connect_clicked(clone!(
         #[strong]
-        device,
+        device_content,
         #[strong]
         window,
         #[strong]
         update_device_status_action,
         move |_| {
-            match device.enable_device() {
+            match device_content.enable_device() {
                 Ok(_) => update_device_status_action.activate(None),
                 Err(e) => error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string()),
             }
@@ -335,13 +330,13 @@ fn usb_device_page(
 
     control_button_stop_device_button.connect_clicked(clone!(
         #[strong]
-        device,
+        device_content,
         #[strong]
         window,
         #[strong]
         update_device_status_action,
         move |_| {
-            match device.stop_device() {
+            match device_content.stop_device() {
                 Ok(_) => update_device_status_action.activate(None),
                 Err(e) => error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string()),
             }
@@ -350,27 +345,28 @@ fn usb_device_page(
 
     control_button_disable_device_button.connect_clicked(clone!(
         #[strong]
-        device,
+        device_content,
         #[strong]
         window,
         #[strong]
         update_device_status_action,
         move |_| {
-            match device.disable_device() {
+            match device_content.disable_device() {
                 Ok(_) => update_device_status_action.activate(None),
                 Err(e) => error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string()),
             }
         }
     ));
 
-    for profile in profiles {
+    for profile in profiles.clone() {
+        let profile_content = profile.profile();
         let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
             gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
             gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
         );
         let profile_expander_row = adw::ExpanderRow::new();
         let profile_icon = gtk::Image::builder()
-            .icon_name(&profile.icon_name)
+            .icon_name(&profile_content.icon_name)
             .pixel_size(32)
             .build();
         let profile_status_icon = gtk::Image::builder()
@@ -403,12 +399,12 @@ fn usb_device_page(
         profile_remove_button.add_css_class("destructive-action");
         profile_expander_row.add_prefix(&profile_icon);
         profile_expander_row.add_suffix(&profile_status_icon);
-        profile_expander_row.set_title(&profile.i18n_desc);
-        profile_expander_row.set_subtitle(&profile.codename);
+        profile_expander_row.set_title(&profile_content.i18n_desc);
+        profile_expander_row.set_subtitle(&profile_content.codename);
         //
         let color_badge_experimental = ColorBadge::new();
         color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
-        if profile.experimental {
+        if profile_content.experimental {
             color_badge_experimental.set_label1(t!("status_yes"));
             color_badge_experimental.set_css_style("background-red-bg");
         } else {
@@ -420,7 +416,7 @@ fn usb_device_page(
         color_badge_experimental.set_theme_changed_action(theme_changed_action);
         let color_badge_license = ColorBadge::new();
         color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
-        color_badge_license.set_label1(profile.license.clone());
+        color_badge_license.set_label1(profile_content.license.clone());
         color_badge_license.set_css_style("background-accent-bg");
         color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
         color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
@@ -436,19 +432,23 @@ fn usb_device_page(
         rows_size_group.add_widget(&profile_action_box);
         available_profiles_list_row.add(&profile_expander_row);
         //
+        let profiles_rc = Rc::new(profiles.clone());
         profile_install_button.connect_clicked(clone!(
             #[strong]
             window,
             #[strong]
-            profile,
-            #[strong]
             update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]     
+            profiles_rc,
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &profile,
-                    "install",
                     &update_device_status_action,
+                    &profile,
+                    &profiles_rc,
+                    "install",
                 );
             }
         ));
@@ -456,22 +456,25 @@ fn usb_device_page(
             #[strong]
             window,
             #[strong]
-            profile,
-            #[strong]
             update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]     
+            profiles_rc,
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &profile,
-                    "remove",
                     &update_device_status_action,
+                    &profile,
+                    &profiles_rc,
+                    "install",
                 );
             }
         ));
         update_device_status_action.connect_activate(clone!(move |_, _| {
-            let profile_status = profile.get_status();
+            let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
-            if profile.removable {
+            if profile_content.removable {
                 profile_remove_button.set_sensitive(profile_status);
             } else {
                 profile_remove_button.set_sensitive(false);
@@ -482,7 +485,7 @@ fn usb_device_page(
 
     update_device_status_action.connect_activate(clone!(
         #[strong]
-        device,
+        device_content,
         #[strong]
         device_status_indicator,
         #[strong]
@@ -495,7 +498,7 @@ fn usb_device_page(
         control_button_disable_device_button,
         move |_, _| {
             let updated_device =
-                CfhdbUsbDevice::get_device_from_busid(&device.sysfs_busid).unwrap();
+                CfhdbUsbDevice::get_device_from_busid(&device_content.sysfs_busid).unwrap();
             let (started, enabled) = (
                 updated_device.started.unwrap_or_default(),
                 updated_device.enabled,
@@ -540,10 +543,10 @@ fn usb_device_page(
             } else {
                 "background-red-bg"
             });
-            driver_color_badge.set_label1(textwrap::fill(device.kernel_driver.as_str(), 10));
-            sysfs_busid_color_badge.set_label1(textwrap::fill(&device.sysfs_busid.as_str(), 10));
-            vendor_id_color_badge.set_label1(textwrap::fill(&device.vendor_id.as_str(), 10));
-            product_id_color_badge.set_label1(textwrap::fill(&device.product_id.as_str(), 10));
+            driver_color_badge.set_label1(textwrap::fill(&device_content.kernel_driver.as_str(), 10));
+            sysfs_busid_color_badge.set_label1(textwrap::fill(&device_content.sysfs_busid.as_str(), 10));
+            vendor_id_color_badge.set_label1(textwrap::fill(&device_content.vendor_id.as_str(), 10));
+            product_id_color_badge.set_label1(textwrap::fill(&device_content.product_id.as_str(), 10));
         }
     ));
 
@@ -566,12 +569,15 @@ fn usb_device_page(
 
 fn profile_modify(
     window: ApplicationWindow,
-    profile: &CfhdbUsbProfile,
-    opreation: &str,
     update_device_status_action: &gio::SimpleAction,
+    profile: &Arc<PreCheckedUsbProfile>,
+    all_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>,
+    opreation: &str,
 ) {
     let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
     let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
+
+    let profile_content = profile.profile();
 
     let profile_modify_log_terminal_buffer = gtk::TextBuffer::builder().build();
 
@@ -616,17 +622,17 @@ fn profile_modify(
 
     thread::spawn(clone!(
         #[strong]
-        profile,
+        profile_content,
         #[strong]
         string_opreation,
         move || {
             let script = match string_opreation.as_str() {
-                "install" => profile.install_script,
-                "remove" => profile.remove_script,
+                "install" => profile_content.install_script,
+                "remove" => profile_content.remove_script,
                 _ => panic!(),
             };
             match script {
-                Some(t) => match profile.packages {
+                Some(t) => match profile_content.packages {
                     Some(a) => {
                         let package_list = a.join(" ");
                         let modify_command =
@@ -643,7 +649,7 @@ fn profile_modify(
                         );
                     }
                 },
-                None => match profile.packages {
+                None => match profile_content.packages {
                     Some(a) => {
                         let package_list = a.join(" ");
                         let modify_command =
@@ -722,6 +728,8 @@ fn profile_modify(
         #[strong]
         profile_modify_dialog,
         #[strong]
+        all_profiles,
+        #[strong]
         update_device_status_action,
         move |choice: glib::GString| {
             match choice.as_str() {
@@ -733,6 +741,9 @@ fn profile_modify(
                 }
                 _ => {
                     profile_modify_dialog.force_close();
+                    for a_profile in all_profiles.iter() {
+                        a_profile.update_installed();
+                    }
                     update_device_status_action.activate(None);
                 }
             }

@@ -9,15 +9,13 @@ pub struct PreCheckedUsbDevice {
 
 pub struct PreCheckedUsbProfile {
     profile: CfhdbUsbProfile,
-    updated_sender: async_channel::Sender<ChannelMsg>,
     installed: Arc<Mutex<bool>>
 }
 
 impl PreCheckedUsbProfile {
-    pub fn new(profile: CfhdbUsbProfile, updated_sender: async_channel::Sender<ChannelMsg>) -> Self {
+    pub fn new(profile: CfhdbUsbProfile) -> Self {
         Self {
             profile,
-            updated_sender,
             installed: Arc::new(Mutex::new(false))
         }
     }
@@ -25,17 +23,15 @@ impl PreCheckedUsbProfile {
         self.profile.clone()
     }
     pub fn installed(&self) -> bool {
-        self.profile.get_status()
+        self.installed.lock().unwrap().clone()
     }
     pub fn update_installed(&self) {
         *self.installed.lock().unwrap() = self.profile.get_status();
-        self.updated_sender.send_blocking(ChannelMsg::UpdateMsg).unwrap();
     }
 }
 
 pub fn get_usb_devices(
-    updated_sender: async_channel::Sender<ChannelMsg>,
-    profiles: &Vec<CfhdbUsbProfile>,
+    profiles: &[Arc<PreCheckedUsbProfile>],
 ) -> Option<HashMap<String, Vec<PreCheckedUsbDevice>>> {
     match CfhdbUsbDevice::get_devices() {
         Some(devices) => {
@@ -43,7 +39,7 @@ pub fn get_usb_devices(
             return Some(hashmap.iter().map(move |x|{
                 let mut pre_checked_devices = vec![];
                 for  i in x.1 {
-                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone(), updated_sender.clone()));
+                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
                 }
                 (x.0.clone(), pre_checked_devices)
             }).collect())
@@ -52,9 +48,10 @@ pub fn get_usb_devices(
     }
 }
 
-fn get_pre_checked_device(profile_data: &[CfhdbUsbProfile], device: CfhdbUsbDevice, updated_sender: async_channel::Sender<ChannelMsg>) -> PreCheckedUsbDevice {
+fn get_pre_checked_device(profile_data: &[Arc<PreCheckedUsbProfile>], device: CfhdbUsbDevice) -> PreCheckedUsbDevice {
     let mut available_profiles = vec![];
-    for profile in profile_data.iter() {
+    for profile_arc in profile_data.iter() {
+        let profile = profile_arc.profile();
         let matching = {
             if (profile.blacklisted_class_codes.contains(&"*".to_owned())
                 || profile.blacklisted_class_codes.contains(&device.class_code))
@@ -75,7 +72,7 @@ fn get_pre_checked_device(profile_data: &[CfhdbUsbProfile], device: CfhdbUsbDevi
         };
 
         if matching {
-            available_profiles.push(Arc::new(PreCheckedUsbProfile::new(profile.clone(), updated_sender.clone())));
+            available_profiles.push(profile_arc.clone());
         }
     }
     PreCheckedUsbDevice {

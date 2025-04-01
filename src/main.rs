@@ -4,8 +4,7 @@ use adw::{prelude::*, *};
 use cfhdb::{pci::PreCheckedPciDevice, usb::PreCheckedUsbDevice};
 use gdk::Display;
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
-use libcfhdb::{pci::CfhdbPciDevice, usb::CfhdbUsbDevice};
-use std::{collections::HashMap, env};
+use std::env;
 
 use config::APP_ID;
 

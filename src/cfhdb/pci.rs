@@ -9,15 +9,13 @@ pub struct PreCheckedPciDevice {
 
 pub struct PreCheckedPciProfile {
     profile: CfhdbPciProfile,
-    updated_sender: async_channel::Sender<ChannelMsg>,
     installed: Arc<Mutex<bool>>
 }
 
 impl PreCheckedPciProfile {
-    pub fn new(profile: CfhdbPciProfile, updated_sender: async_channel::Sender<ChannelMsg>) -> Self {
+    pub fn new(profile: CfhdbPciProfile) -> Self {
         Self {
             profile,
-            updated_sender,
             installed: Arc::new(Mutex::new(false))
         }
     }
@@ -29,11 +27,6 @@ impl PreCheckedPciProfile {
     }
     pub fn update_installed(&self) {
         *self.installed.lock().unwrap() = self.profile.get_status();
-        match self.updated_sender.send_blocking(ChannelMsg::UpdateMsg) {
-            Ok(_) => {}
-            Err(e) => eprintln!("{}", e)
-        };
-        println!("ran {}", self.profile.codename);
     }
 }
 

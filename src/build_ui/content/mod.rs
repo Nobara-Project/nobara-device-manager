@@ -6,10 +6,7 @@ use adw::prelude::*;
 use adw::*;
 use gtk::glib::{clone, MainContext};
 use gtk::{Align, Orientation, PolicyType, Stack, StackTransitionType, ToggleButton};
-use libcfhdb::pci::CfhdbPciDevice;
-use libcfhdb::usb::CfhdbUsbDevice;
 use pci::create_pci_class;
-use std::collections::HashMap;
 use std::io::BufReader;
 use std::io::{BufRead, Write};
 use std::os::unix::fs::PermissionsExt;
@@ -23,7 +20,6 @@ mod usb;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
-    update_device_status_action: &gio::SimpleAction,
     hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
     hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
 ) -> adw::OverlaySplitView {
@@ -60,6 +56,8 @@ pub fn main_content(
     let mut usb_buttons = vec![];
     let null_toggle_sidebar = ToggleButton::default();
 
+    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
+
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
@@ -91,7 +89,7 @@ pub fn main_content(
         ));
     }
 
-    /*for (class, devices) in hashmap_usb {
+    for (class, devices) in hashmap_usb {
         let class = format!("usb_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
@@ -120,7 +118,7 @@ pub fn main_content(
                 .into(),
             &null_toggle_sidebar,
         ));
-    }*/
+    }
 
     main_content_overlay_split_view
         .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));
