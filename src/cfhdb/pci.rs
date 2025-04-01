@@ -1,21 +1,93 @@
 use crate::{config::*, ChannelMsg};
 use libcfhdb::pci::*;
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path, sync::{Arc, Mutex}};
+
+pub struct PreCheckedPciDevice {
+    pub device: CfhdbPciDevice,
+    pub profiles:Vec<Arc<PreCheckedPciProfile>>
+}
+
+pub struct PreCheckedPciProfile {
+    profile: CfhdbPciProfile,
+    updated_sender: async_channel::Sender<ChannelMsg>,
+    installed: Arc<Mutex<bool>>
+}
+
+impl PreCheckedPciProfile {
+    pub fn new(profile: CfhdbPciProfile, updated_sender: async_channel::Sender<ChannelMsg>) -> Self {
+        Self {
+            profile,
+            updated_sender,
+            installed: Arc::new(Mutex::new(false))
+        }
+    }
+    pub fn profile(&self) -> CfhdbPciProfile {
+        self.profile.clone()
+    }
+    pub fn installed(&self) -> bool {
+        self.installed.lock().unwrap().clone()
+    }
+    pub fn update_installed(&self) {
+        *self.installed.lock().unwrap() = self.profile.get_status();
+        match self.updated_sender.send_blocking(ChannelMsg::UpdateMsg) {
+            Ok(_) => {}
+            Err(e) => eprintln!("{}", e)
+        };
+        println!("ran {}", self.profile.codename);
+    }
+}
 
 pub fn get_pci_devices(
-    profiles: &Vec<CfhdbPciProfile>,
-) -> Option<HashMap<String, Vec<CfhdbPciDevice>>> {
+    profiles: &[Arc<PreCheckedPciProfile>],
+) -> Option<HashMap<String, Vec<PreCheckedPciDevice>>> {
     match CfhdbPciDevice::get_devices() {
         Some(devices) => {
-            for i in &devices {
-                CfhdbPciDevice::set_available_profiles(&profiles, &i);
-            }
             let hashmap = CfhdbPciDevice::create_class_hashmap(devices);
-            return Some(hashmap);
+            return Some(hashmap.iter().map(move |x|{
+                let mut pre_checked_devices = vec![];
+                for  i in x.1 {
+                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
+                }
+                (x.0.clone(), pre_checked_devices)
+            }).collect())
         }
         None => return None,
     }
 }
+
+fn get_pre_checked_device(profile_data: &[Arc<PreCheckedPciProfile>], device: CfhdbPciDevice) -> PreCheckedPciDevice {
+    let mut available_profiles = vec![];
+    for profile_arc in profile_data.iter() {
+        let profile = profile_arc.profile();
+        let matching = {
+            if (profile.blacklisted_class_ids.contains(&"*".to_owned())
+                || profile.blacklisted_class_ids.contains(&device.class_id))
+                || (profile.blacklisted_vendor_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_vendor_ids.contains(&device.vendor_id))
+                || (profile.blacklisted_device_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_device_ids.contains(&device.device_id))
+            {
+                false
+            } else {
+                (profile.class_ids.contains(&"*".to_owned())
+                    || profile.class_ids.contains(&device.class_id))
+                    && (profile.vendor_ids.contains(&"*".to_owned())
+                        || profile.vendor_ids.contains(&device.vendor_id))
+                    && (profile.device_ids.contains(&"*".to_owned())
+                        || profile.device_ids.contains(&device.device_id))
+            }
+        };
+
+        if matching {
+            available_profiles.push(profile_arc.clone());
+        }
+    }
+    PreCheckedPciDevice {
+        device,
+        profiles: available_profiles
+    }
+}
+
 pub fn get_pci_profiles_from_url(
     sender: &async_channel::Sender<ChannelMsg>,
 ) -> Result<Vec<CfhdbPciProfile>, std::io::Error> {

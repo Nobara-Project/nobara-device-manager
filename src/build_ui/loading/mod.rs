@@ -1,8 +1,10 @@
+use std::sync::Arc;
+
 use crate::{
     build_ui::content::main_content,
     cfhdb::{
-        pci::{get_pci_devices, get_pci_profiles_from_url},
-        usb::{get_usb_devices, get_usb_profiles_from_url},
+        pci::{get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile},
+        usb::{get_usb_devices, get_usb_profiles_from_url, PreCheckedUsbDevice},
     },
     config::APP_ICON,
     ChannelMsg,
@@ -12,9 +14,12 @@ use gtk::{
     glib::{clone, MainContext},
     Orientation,
 };
+use libcfhdb::usb::CfhdbUsbDevice;
 
 pub fn loading_content(window: &ApplicationWindow) {
     let (status_sender, status_receiver) = async_channel::unbounded::<ChannelMsg>();
+    let (profile_update_sender, profile_update_receiver) = async_channel::unbounded::<ChannelMsg>();
+    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
     let loading_box = gtk::Box::builder()
         .orientation(Orientation::Vertical)
         .margin_top(20)
@@ -69,6 +74,10 @@ pub fn loading_content(window: &ApplicationWindow) {
         window,
         #[weak]
         loading_label,
+        #[strong]
+        loading_label,
+        #[strong]
+        update_device_status_action,
         async move {
             while let Ok(state) = status_receiver.recv().await {
                 match state {
@@ -76,10 +85,10 @@ pub fn loading_content(window: &ApplicationWindow) {
                         loading_label.set_label(&output_str);
                     }
                     ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb) => {
-                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb)));
+                        window.set_content(Some(&main_content(&window, &update_device_status_action, hashmap_pci, hashmap_usb)));
                     }
-                    ChannelMsg::FailMsg => {}
-                    ChannelMsg::SuccessMsg => {
+                    ChannelMsg::FailMsg  => {}
+                    ChannelMsg::SuccessMsg | ChannelMsg::UpdateMsg => {
                         panic!()
                     }
                 }
@@ -87,7 +96,26 @@ pub fn loading_content(window: &ApplicationWindow) {
         }
     ));
 
-    load_cfhdb(status_sender);
+    let profile_update_context = MainContext::default();
+
+    profile_update_context.spawn_local(clone!(
+        #[strong]
+        update_device_status_action,
+        async move {
+            while let Ok(state) = profile_update_receiver.recv().await {
+                match state {
+                    ChannelMsg::UpdateMsg => {
+                        update_device_status_action.activate(None);
+                    }
+                    _ => {
+                        panic!()
+                    }
+                }
+            }
+        }
+    ));
+
+    load_cfhdb(status_sender, profile_update_sender);
 
     window_toolbar.add_top_bar(&window_headerbar);
     loading_box.append(&loading_icon);
@@ -97,9 +125,9 @@ pub fn loading_content(window: &ApplicationWindow) {
     window.set_content(Some(&window_toolbar));
 }
 
-fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
+fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>, profile_update_sender: async_channel::Sender<ChannelMsg>) {
     std::thread::spawn(move || {
-        let pci_profiles = match get_pci_profiles_from_url(&status_sender) {
+        let pci_profiles: Vec<Arc<PreCheckedPciProfile>> = match get_pci_profiles_from_url(&status_sender) {
             Ok(t) => t,
             Err(e) => {
                 status_sender
@@ -110,7 +138,11 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                     .expect("Channel closed");
                 panic!();
             }
-        };
+        }.into_iter().map(|x| {
+            let profile = PreCheckedPciProfile::new(x, profile_update_sender.clone());
+            profile.update_installed();
+            Arc::new(profile)
+        }).collect();
         let usb_profiles = match get_usb_profiles_from_url(&status_sender) {
             Ok(t) => t,
             Err(e) => {
@@ -124,12 +156,32 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
             }
         };
         match (
-            get_pci_devices(&pci_profiles),
-            get_usb_devices(&usb_profiles),
+            get_pci_devices(pci_profiles.as_slice()),
+            get_usb_devices(profile_update_sender, &usb_profiles),
         ) {
-            (Some(a), Some(b)) => {
+            (Some(hashmap_pci), Some(hashmap_usb)) => {
+                let mut hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)> = hashmap_pci.into_iter().collect();
+                hashmap_pci.sort_by(|a, b| {
+                    let a_class = t!(format!("pci_class_name_{}", a.0))
+                        .to_string()
+                        .to_lowercase();
+                    let b_class = t!(format!("pci_class_name_{}", b.0))
+                        .to_string()
+                        .to_lowercase();
+                    b_class.cmp(&a_class)
+                });
+                let mut hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)> = hashmap_usb.into_iter().collect();
+                hashmap_usb.sort_by(|a, b| {
+                    let a_class = t!(format!("usb_class_name_{}", a.0))
+                        .to_string()
+                        .to_lowercase();
+                    let b_class = t!(format!("usb_class_name_{}", b.0))
+                        .to_string()
+                        .to_lowercase();
+                    b_class.cmp(&a_class)
+                });
                 status_sender
-                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(a, b))
+                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb))
                     .expect("Channel closed");
             }
             (_, _) => {

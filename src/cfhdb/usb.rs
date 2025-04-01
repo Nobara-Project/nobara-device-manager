@@ -1,21 +1,89 @@
 use crate::{config::*, ChannelMsg};
 use libcfhdb::usb::*;
-use std::{collections::HashMap, fs, path::Path};
+use std::{collections::HashMap, fs, path::Path, sync::{Arc, Mutex}};
+
+pub struct PreCheckedUsbDevice {
+    pub device: CfhdbUsbDevice,
+    pub profiles:Vec<Arc<PreCheckedUsbProfile>>
+}
+
+pub struct PreCheckedUsbProfile {
+    profile: CfhdbUsbProfile,
+    updated_sender: async_channel::Sender<ChannelMsg>,
+    installed: Arc<Mutex<bool>>
+}
+
+impl PreCheckedUsbProfile {
+    pub fn new(profile: CfhdbUsbProfile, updated_sender: async_channel::Sender<ChannelMsg>) -> Self {
+        Self {
+            profile,
+            updated_sender,
+            installed: Arc::new(Mutex::new(false))
+        }
+    }
+    pub fn profile(&self) -> CfhdbUsbProfile {
+        self.profile.clone()
+    }
+    pub fn installed(&self) -> bool {
+        self.profile.get_status()
+    }
+    pub fn update_installed(&self) {
+        *self.installed.lock().unwrap() = self.profile.get_status();
+        self.updated_sender.send_blocking(ChannelMsg::UpdateMsg).unwrap();
+    }
+}
 
 pub fn get_usb_devices(
+    updated_sender: async_channel::Sender<ChannelMsg>,
     profiles: &Vec<CfhdbUsbProfile>,
-) -> Option<HashMap<String, Vec<CfhdbUsbDevice>>> {
+) -> Option<HashMap<String, Vec<PreCheckedUsbDevice>>> {
     match CfhdbUsbDevice::get_devices() {
         Some(devices) => {
-            for i in &devices {
-                CfhdbUsbDevice::set_available_profiles(&profiles, &i);
-            }
             let hashmap = CfhdbUsbDevice::create_class_hashmap(devices);
-            return Some(hashmap);
+            return Some(hashmap.iter().map(move |x|{
+                let mut pre_checked_devices = vec![];
+                for  i in x.1 {
+                    pre_checked_devices.push(get_pre_checked_device(profiles, i.clone(), updated_sender.clone()));
+                }
+                (x.0.clone(), pre_checked_devices)
+            }).collect())
         }
         None => return None,
     }
 }
+
+fn get_pre_checked_device(profile_data: &[CfhdbUsbProfile], device: CfhdbUsbDevice, updated_sender: async_channel::Sender<ChannelMsg>) -> PreCheckedUsbDevice {
+    let mut available_profiles = vec![];
+    for profile in profile_data.iter() {
+        let matching = {
+            if (profile.blacklisted_class_codes.contains(&"*".to_owned())
+                || profile.blacklisted_class_codes.contains(&device.class_code))
+                || (profile.blacklisted_vendor_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_vendor_ids.contains(&device.vendor_id))
+                || (profile.blacklisted_product_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_product_ids.contains(&device.product_id))
+            {
+                false
+            } else {
+                (profile.class_codes.contains(&"*".to_owned())
+                    || profile.class_codes.contains(&device.class_code))
+                    && (profile.vendor_ids.contains(&"*".to_owned())
+                        || profile.vendor_ids.contains(&device.vendor_id))
+                    && (profile.product_ids.contains(&"*".to_owned())
+                        || profile.product_ids.contains(&device.product_id))
+            }
+        };
+
+        if matching {
+            available_profiles.push(Arc::new(PreCheckedUsbProfile::new(profile.clone(), updated_sender.clone())));
+        }
+    }
+    PreCheckedUsbDevice {
+        device,
+        profiles: available_profiles
+    }
+}
+
 pub fn get_usb_profiles_from_url(
     sender: &async_channel::Sender<ChannelMsg>,
 ) -> Result<Vec<CfhdbUsbProfile>, std::io::Error> {
@@ -157,7 +225,7 @@ pub fn get_usb_profiles_from_url(
                 None => Some(
                     profile["packages"]
                         .as_array()
-                        .expect("invalid_usb_profile_class_ids")
+                        .expect("invalid_usb_profile_class_codes")
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
                         .collect(),

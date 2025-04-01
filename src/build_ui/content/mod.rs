@@ -1,3 +1,5 @@
+use crate::cfhdb::pci::PreCheckedPciDevice;
+use crate::cfhdb::usb::PreCheckedUsbDevice;
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 use crate::ChannelMsg;
 use adw::prelude::*;
@@ -21,8 +23,9 @@ mod usb;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
-    hashmap_pci: HashMap<String, Vec<CfhdbPciDevice>>,
-    hashmap_usb: HashMap<String, Vec<CfhdbUsbDevice>>,
+    update_device_status_action: &gio::SimpleAction,
+    hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
+    hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
 ) -> adw::OverlaySplitView {
     let theme_changed_action = gio::SimpleAction::new("theme_changed", None);
     theme_changed_thread(&theme_changed_action);
@@ -57,30 +60,6 @@ pub fn main_content(
     let mut usb_buttons = vec![];
     let null_toggle_sidebar = ToggleButton::default();
 
-    let mut hashmap_pci: Vec<(&String, &Vec<CfhdbPciDevice>)> = hashmap_pci.iter().collect();
-    hashmap_pci.sort_by(|a, b| {
-        let a_class = t!(format!("pci_class_name_{}", a.0))
-            .to_string()
-            .to_lowercase();
-        let b_class = t!(format!("pci_class_name_{}", b.0))
-            .to_string()
-            .to_lowercase();
-        b_class.cmp(&a_class)
-    });
-
-    let mut hashmap_usb: Vec<(&String, &Vec<CfhdbUsbDevice>)> = hashmap_usb.iter().collect();
-    hashmap_usb.sort_by(|a, b| {
-        let a_class = t!(format!("usb_class_name_{}", a.0))
-            .to_string()
-            .to_lowercase();
-        let b_class = t!(format!("usb_class_name_{}", b.0))
-            .to_string()
-            .to_lowercase();
-        b_class.cmp(&a_class)
-    });
-
-    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
-
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
@@ -112,7 +91,7 @@ pub fn main_content(
         ));
     }
 
-    for (class, devices) in hashmap_usb {
+    /*for (class, devices) in hashmap_usb {
         let class = format!("usb_class_name_{}", class);
         let class_i18n = t!(class).to_string();
         window_stack.add_titled(
@@ -141,7 +120,7 @@ pub fn main_content(
                 .into(),
             &null_toggle_sidebar,
         ));
-    }
+    }*/
 
     main_content_overlay_split_view
         .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));

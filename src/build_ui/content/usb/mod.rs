@@ -708,7 +708,7 @@ fn profile_modify(
                         profile_modify_dialog
                             .set_response_enabled("profile_modify_dialog_reboot", false);
                     }
-                    ChannelMsg::SuccessMsgDeviceFetch(_, _) => {
+                    ChannelMsg::SuccessMsgDeviceFetch(_, _)   | ChannelMsg::UpdateMsg => {
                         panic!();
                     }
                 }
