@@ -73,8 +73,9 @@ pub fn main_content(
     {
         let pci_profiles_rc = Rc::new(pci_profiles);
         let usb_profiles_rc = Rc::new(usb_profiles);
-        all_profiles_button.connect_clicked(clone!(#[strong] window, #[strong] update_device_status_action, #[strong] theme_changed_action, move |_| {
-            all_profile_dialog(window.clone(), &update_device_status_action, &theme_changed_action, &pci_profiles_rc, &usb_profiles_rc)
+        let dialog = all_profile_dialog(window.clone(), &update_device_status_action, &theme_changed_action, &pci_profiles_rc, &usb_profiles_rc);
+        all_profiles_button.connect_clicked(clone!(#[strong] window, #[strong] dialog, move |_| {
+            dialog.present(Some(&window));
         }));
     }
 
@@ -611,7 +612,7 @@ pub fn get_icon_for_class(class: &str) -> Option<&str> {
     }
 }
 
-fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &gio::SimpleAction, theme_changed_action: &gio::SimpleAction, pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>, usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>) {
+fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &gio::SimpleAction, theme_changed_action: &gio::SimpleAction, pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>, usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>) -> adw::AlertDialog {
     let boxedlist = gtk::ListBox::builder()
         .vexpand(true)
         .hexpand(true)
@@ -890,7 +891,5 @@ fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &g
             profile_status_icon.set_visible(profile_status);
         }));
     }
-    //
-    update_device_status_action.activate(None);
-    dialog.present(Some(&window));
+    dialog
 }
