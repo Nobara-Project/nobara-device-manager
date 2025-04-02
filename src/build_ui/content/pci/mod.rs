@@ -612,7 +612,7 @@ fn pci_device_page(
     content_box
 }
 
-fn profile_modify(
+pub fn profile_modify(
     window: ApplicationWindow,
     update_device_status_action: &gio::SimpleAction,
     profile: &Arc<PreCheckedPciProfile>,
@@ -759,7 +759,7 @@ fn profile_modify(
                         profile_modify_dialog
                             .set_response_enabled("profile_modify_dialog_reboot", false);
                     }
-                    ChannelMsg::SuccessMsgDeviceFetch(_, _) | ChannelMsg::UpdateMsg => {
+                    ChannelMsg::SuccessMsgDeviceFetch(..) | ChannelMsg::UpdateMsg => {
                         panic!();
                     }
                 }

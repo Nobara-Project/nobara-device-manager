@@ -1,5 +1,5 @@
-use crate::cfhdb::pci::PreCheckedPciDevice;
-use crate::cfhdb::usb::PreCheckedUsbDevice;
+use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
+use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 use crate::ChannelMsg;
 use adw::prelude::*;
@@ -11,9 +11,13 @@ use std::io::BufReader;
 use std::io::{BufRead, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::process::Command;
+use std::rc::Rc;
+use std::sync::Arc;
 use std::thread;
 use usb::create_usb_class;
 use users::get_current_username;
+
+use super::color_badge::ColorBadge;
 
 mod pci;
 mod usb;
@@ -22,6 +26,8 @@ pub fn main_content(
     window: &adw::ApplicationWindow,
     hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
     hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
+    pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
+    usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
 ) -> adw::OverlaySplitView {
     let theme_changed_action = gio::SimpleAction::new("theme_changed", None);
     theme_changed_thread(&theme_changed_action);
@@ -43,12 +49,18 @@ pub fn main_content(
         .transition_type(StackTransitionType::SlideUpDown)
         .build();
 
+    let all_profiles_button = gtk::Button::builder()
+        .icon_name("emblem-system-symbolic")
+        .tooltip_text(t!("all_profiles_button_label"))
+        .build();
+
     main_content_overlay_split_view.set_content(Some(&main_content_content(
         &window,
         &window_banner,
         &window_stack,
         &main_content_overlay_split_view,
         &window_breakpoint,
+        all_profiles_button.clone()
     )));
 
     let mut is_first = true;
@@ -57,6 +69,14 @@ pub fn main_content(
     let null_toggle_sidebar = ToggleButton::default();
 
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
+
+    {
+        let pci_profiles_rc = Rc::new(pci_profiles);
+        let usb_profiles_rc = Rc::new(usb_profiles);
+        all_profiles_button.connect_clicked(clone!(#[strong] window, #[strong] update_device_status_action, #[strong] theme_changed_action, move |_| {
+            all_profile_dialog(window.clone(), &update_device_status_action, &theme_changed_action, &pci_profiles_rc, &usb_profiles_rc)
+        }));
+    }
 
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
@@ -234,6 +254,7 @@ fn main_content_content(
     stack: &Stack,
     main_content_overlay_split_view: &adw::OverlaySplitView,
     window_breakpoint: &adw::Breakpoint,
+    all_profiles_button: gtk::Button,
 ) -> adw::ToolbarView {
     let window_headerbar = HeaderBar::builder()
         .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
@@ -254,6 +275,7 @@ fn main_content_content(
         .bidirectional()
         .build();
 
+    window_headerbar.pack_end(&all_profiles_button);
     window_toolbar.add_top_bar(&window_headerbar);
     window_toolbar.add_top_bar(&window_banner.clone());
     window_breakpoint.add_setter(&sidebar_toggle_button, "visible", Some(&true.to_value()));
@@ -267,6 +289,7 @@ fn main_content_content(
 fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::HeaderBar) {
     let credits_button = gtk::Button::builder()
         .icon_name("dialog-information-symbolic")
+        .tooltip_text(t!("credits_button_label"))
         .build();
 
     let credits_window = adw::AboutDialog::builder()
@@ -586,4 +609,288 @@ pub fn get_icon_for_class(class: &str) -> Option<&str> {
         //
         _ => None,
     }
+}
+
+fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &gio::SimpleAction, theme_changed_action: &gio::SimpleAction, pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>, usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>) {
+    let boxedlist = gtk::ListBox::builder()
+        .vexpand(true)
+        .hexpand(true)
+        .margin_bottom(20)
+        .margin_top(20)
+        .margin_start(10)
+        .margin_end(20)
+        .build();
+    boxedlist.add_css_class("boxed-list");
+    let scroll = gtk::ScrolledWindow::builder()
+        .width_request(600)
+        .height_request(400)
+        .propagate_natural_height(true)
+        .propagate_natural_width(true)
+        .vexpand(true)
+        .hexpand(true)
+        .child(&boxedlist)
+        .build();
+    let dialog = adw::AlertDialog::builder()
+        .extra_child(&scroll)
+        .heading(t!(format!("all_profile_dialog_heading")))
+        .build();
+    let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
+    let pci_profiles_clone0 = pci_profiles.clone();
+    let pci_profiles_clone1: Vec<Arc<PreCheckedPciProfile>> = pci_profiles.iter().map(|f| f.clone()).collect();
+    for profile in pci_profiles_clone1 {
+        let profile_content = profile.profile();
+        let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
+            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
+            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
+        );
+        let profile_expander_row = adw::ExpanderRow::new();
+        let profile_icon = gtk::Image::builder()
+            .icon_name(&profile_content.icon_name)
+            .pixel_size(32)
+            .build();
+        let profile_status_icon = gtk::Image::builder()
+            .icon_name("emblem-default")
+            .pixel_size(24)
+            .visible(false)
+            .tooltip_text(t!("profile_status_icon_tooltip_text"))
+            .build();
+        let profile_content_row = adw::ActionRow::builder().build();
+        let profile_install_button = gtk::Button::builder()
+            .margin_start(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .valign(gtk::Align::Center)
+            .label(t!("profile_install_button_label"))
+            .tooltip_text(t!("profile_install_button_tooltip_text"))
+            .sensitive(false)
+            .build();
+        profile_install_button.add_css_class("suggested-action");
+        let profile_remove_button = gtk::Button::builder()
+            .margin_end(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .valign(gtk::Align::Center)
+            .label(t!("profile_remove_button_label"))
+            .tooltip_text(t!("profile_remove_button_tooltip_text"))
+            .sensitive(false)
+            .build();
+        let profile_action_box = gtk::Box::builder().homogeneous(true).build();
+        profile_remove_button.add_css_class("destructive-action");
+        profile_expander_row.add_prefix(&profile_icon);
+        profile_expander_row.add_suffix(&profile_status_icon);
+        profile_expander_row.set_title(&profile_content.i18n_desc);
+        profile_expander_row.set_subtitle(&profile_content.codename);
+        //
+        let color_badge_experimental = ColorBadge::new();
+        color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
+        if profile_content.experimental {
+            color_badge_experimental.set_label1(t!("status_yes"));
+            color_badge_experimental.set_css_style("background-red-bg");
+        } else {
+            color_badge_experimental.set_label1(t!("status_no"));
+            color_badge_experimental.set_css_style("background-accent-bg");
+        }
+        color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
+        color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
+        color_badge_experimental.set_theme_changed_action(theme_changed_action);
+        let color_badge_license = ColorBadge::new();
+        color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
+        color_badge_license.set_label1(profile_content.license.clone());
+        color_badge_license.set_css_style("background-accent-bg");
+        color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
+        color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
+        color_badge_license.set_theme_changed_action(theme_changed_action);
+        let badges_warp_box = gtk::Box::new(Orientation::Vertical, 3);
+        badges_warp_box.append(&color_badge_license);
+        badges_warp_box.append(&color_badge_experimental);
+        profile_content_row.add_prefix(&badges_warp_box);
+        profile_action_box.append(&profile_remove_button);
+        profile_action_box.append(&profile_install_button);
+        profile_content_row.add_suffix(&profile_action_box);
+        profile_expander_row.add_row(&profile_content_row);
+        rows_size_group.add_widget(&profile_action_box);
+        //
+        profile_install_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]
+            pci_profiles_clone0,
+            move |_| {
+                pci::profile_modify(
+                    window.clone(),
+                    &update_device_status_action,
+                    &profile,
+                    &pci_profiles_clone0,
+                    "install",
+                );
+            }
+        ));
+        profile_remove_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]
+            pci_profiles_clone0,
+            move |_| {
+                pci::profile_modify(
+                    window.clone(),
+                    &update_device_status_action,
+                    &profile,
+                    &pci_profiles_clone0,
+                    "install",
+                );
+            }
+        ));
+        //
+        boxedlist.append(&profile_expander_row);
+        //
+        update_device_status_action.connect_activate(clone!(move |_, _| {
+            let profile_status = profile.installed();
+            profile_install_button.set_sensitive(!profile_status);
+            if profile_content.removable {
+                profile_remove_button.set_sensitive(profile_status);
+            } else {
+                profile_remove_button.set_sensitive(false);
+            }
+            profile_status_icon.set_visible(profile_status);
+        }));
+    }
+    //
+    let usb_profiles_clone0 = usb_profiles.clone();
+    let usb_profiles_clone1: Vec<Arc<PreCheckedUsbProfile>> = usb_profiles.iter().map(|f| f.clone()).collect();
+    for profile in usb_profiles_clone1 {
+        let profile_content = profile.profile();
+        let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
+            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
+            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
+        );
+        let profile_expander_row = adw::ExpanderRow::new();
+        let profile_icon = gtk::Image::builder()
+            .icon_name(&profile_content.icon_name)
+            .pixel_size(32)
+            .build();
+        let profile_status_icon = gtk::Image::builder()
+            .icon_name("emblem-default")
+            .pixel_size(24)
+            .visible(false)
+            .tooltip_text(t!("profile_status_icon_tooltip_text"))
+            .build();
+        let profile_content_row = adw::ActionRow::builder().build();
+        let profile_install_button = gtk::Button::builder()
+            .margin_start(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .valign(gtk::Align::Center)
+            .label(t!("profile_install_button_label"))
+            .tooltip_text(t!("profile_install_button_tooltip_text"))
+            .sensitive(false)
+            .build();
+        profile_install_button.add_css_class("suggested-action");
+        let profile_remove_button = gtk::Button::builder()
+            .margin_end(5)
+            .margin_top(5)
+            .margin_bottom(5)
+            .valign(gtk::Align::Center)
+            .label(t!("profile_remove_button_label"))
+            .tooltip_text(t!("profile_remove_button_tooltip_text"))
+            .sensitive(false)
+            .build();
+        let profile_action_box = gtk::Box::builder().homogeneous(true).build();
+        profile_remove_button.add_css_class("destructive-action");
+        profile_expander_row.add_prefix(&profile_icon);
+        profile_expander_row.add_suffix(&profile_status_icon);
+        profile_expander_row.set_title(&profile_content.i18n_desc);
+        profile_expander_row.set_subtitle(&profile_content.codename);
+        //
+        let color_badge_experimental = ColorBadge::new();
+        color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
+        if profile_content.experimental {
+            color_badge_experimental.set_label1(t!("status_yes"));
+            color_badge_experimental.set_css_style("background-red-bg");
+        } else {
+            color_badge_experimental.set_label1(t!("status_no"));
+            color_badge_experimental.set_css_style("background-accent-bg");
+        }
+        color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
+        color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
+        color_badge_experimental.set_theme_changed_action(theme_changed_action);
+        let color_badge_license = ColorBadge::new();
+        color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
+        color_badge_license.set_label1(profile_content.license.clone());
+        color_badge_license.set_css_style("background-accent-bg");
+        color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
+        color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
+        color_badge_license.set_theme_changed_action(theme_changed_action);
+        let badges_warp_box = gtk::Box::new(Orientation::Vertical, 3);
+        badges_warp_box.append(&color_badge_license);
+        badges_warp_box.append(&color_badge_experimental);
+        profile_content_row.add_prefix(&badges_warp_box);
+        profile_action_box.append(&profile_remove_button);
+        profile_action_box.append(&profile_install_button);
+        profile_content_row.add_suffix(&profile_action_box);
+        profile_expander_row.add_row(&profile_content_row);
+        rows_size_group.add_widget(&profile_action_box);
+        //
+        profile_install_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]
+            usb_profiles_clone0,
+            move |_| {
+                usb::profile_modify(
+                    window.clone(),
+                    &update_device_status_action,
+                    &profile,
+                    &usb_profiles_clone0,
+                    "install",
+                );
+            }
+        ));
+        profile_remove_button.connect_clicked(clone!(
+            #[strong]
+            window,
+            #[strong]
+            update_device_status_action,
+            #[strong]
+            profile,
+            #[strong]
+            usb_profiles_clone0,
+            move |_| {
+                usb::profile_modify(
+                    window.clone(),
+                    &update_device_status_action,
+                    &profile,
+                    &usb_profiles_clone0,
+                    "install",
+                );
+            }
+        ));
+        //
+        boxedlist.append(&profile_expander_row);
+        //
+        update_device_status_action.connect_activate(clone!(move |_, _| {
+            let profile_status = profile.installed();
+            profile_install_button.set_sensitive(!profile_status);
+            if profile_content.removable {
+                profile_remove_button.set_sensitive(profile_status);
+            } else {
+                profile_remove_button.set_sensitive(false);
+            }
+            profile_status_icon.set_visible(profile_status);
+        }));
+    }
+    //
+    update_device_status_action.activate(None);
+    dialog.present(Some(&window));
 }

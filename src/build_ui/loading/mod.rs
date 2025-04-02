@@ -83,8 +83,8 @@ pub fn loading_content(window: &ApplicationWindow) {
                     ChannelMsg::OutputLine(output_str) => {
                         loading_label.set_label(&output_str);
                     }
-                    ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb) => {
-                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb)));
+                    ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb, pci_profiles, usb_profiles) => {
+                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb, pci_profiles, usb_profiles)));
                     }
                     ChannelMsg::FailMsg => {}
                     ChannelMsg::SuccessMsg | ChannelMsg::UpdateMsg => {
@@ -175,7 +175,7 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                     b_class.cmp(&a_class)
                 });
                 status_sender
-                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb))
+                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb, pci_profiles, usb_profiles))
                     .expect("Channel closed");
             }
             (_, _) => {
