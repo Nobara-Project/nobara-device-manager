@@ -206,5 +206,9 @@
   "usb_class_name_E0": "Wireless Controllers",
   "usb_class_name_EF": "Miscellaneous",
   "usb_class_name_FE": "Application Specific Devices",
-  "usb_class_name_FF": "Vendor Specific Devices"
+  "usb_class_name_FF": "Vendor Specific Devices",
+  "credits_button_label": "About",
+  "viel_expander_label": "Advanced Device Profiles",
+  "all_profile_dialog_heading": "All Device Profiles",
+  "all_profiles_button_label": "Show All Device Profiles"
 }

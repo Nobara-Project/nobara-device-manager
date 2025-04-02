@@ -1,8 +1,14 @@
+use std::sync::Arc;
+
 use crate::{
     build_ui::content::main_content,
     cfhdb::{
-        pci::{get_pci_devices, get_pci_profiles_from_url},
-        usb::{get_usb_devices, get_usb_profiles_from_url},
+        pci::{
+            get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile,
+        },
+        usb::{
+            get_usb_devices, get_usb_profiles_from_url, PreCheckedUsbDevice, PreCheckedUsbProfile,
+        },
     },
     config::APP_ICON,
     ChannelMsg,
@@ -69,17 +75,19 @@ pub fn loading_content(window: &ApplicationWindow) {
         window,
         #[weak]
         loading_label,
+        #[strong]
+        loading_label,
         async move {
             while let Ok(state) = status_receiver.recv().await {
                 match state {
                     ChannelMsg::OutputLine(output_str) => {
                         loading_label.set_label(&output_str);
                     }
-                    ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb) => {
-                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb)));
+                    ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb, pci_profiles, usb_profiles) => {
+                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb, pci_profiles, usb_profiles)));
                     }
                     ChannelMsg::FailMsg => {}
-                    ChannelMsg::SuccessMsg => {
+                    ChannelMsg::SuccessMsg | ChannelMsg::UpdateMsg => {
                         panic!()
                     }
                 }
@@ -99,37 +107,75 @@ pub fn loading_content(window: &ApplicationWindow) {
 
 fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
     std::thread::spawn(move || {
-        let pci_profiles = match get_pci_profiles_from_url(&status_sender) {
-            Ok(t) => t,
-            Err(e) => {
-                status_sender
-                    .send_blocking(ChannelMsg::OutputLine(e.to_string()))
-                    .expect("Channel closed");
-                status_sender
-                    .send_blocking(ChannelMsg::FailMsg)
-                    .expect("Channel closed");
-                panic!();
+        let pci_profiles: Vec<Arc<PreCheckedPciProfile>> =
+            match get_pci_profiles_from_url(&status_sender) {
+                Ok(t) => t,
+                Err(e) => {
+                    status_sender
+                        .send_blocking(ChannelMsg::OutputLine(e.to_string()))
+                        .expect("Channel closed");
+                    status_sender
+                        .send_blocking(ChannelMsg::FailMsg)
+                        .expect("Channel closed");
+                    panic!();
+                }
             }
-        };
-        let usb_profiles = match get_usb_profiles_from_url(&status_sender) {
-            Ok(t) => t,
-            Err(e) => {
-                status_sender
-                    .send_blocking(ChannelMsg::OutputLine(e.to_string()))
-                    .expect("Channel closed");
-                status_sender
-                    .send_blocking(ChannelMsg::FailMsg)
-                    .expect("Channel closed");
-                panic!();
+            .into_iter()
+            .map(|x| {
+                let profile = PreCheckedPciProfile::new(x);
+                profile.update_installed();
+                Arc::new(profile)
+            })
+            .collect();
+        let usb_profiles: Vec<Arc<PreCheckedUsbProfile>> =
+            match get_usb_profiles_from_url(&status_sender) {
+                Ok(t) => t,
+                Err(e) => {
+                    status_sender
+                        .send_blocking(ChannelMsg::OutputLine(e.to_string()))
+                        .expect("Channel closed");
+                    status_sender
+                        .send_blocking(ChannelMsg::FailMsg)
+                        .expect("Channel closed");
+                    panic!();
+                }
             }
-        };
+            .into_iter()
+            .map(|x| {
+                let profile = PreCheckedUsbProfile::new(x);
+                profile.update_installed();
+                Arc::new(profile)
+            })
+            .collect();
         match (
-            get_pci_devices(&pci_profiles),
-            get_usb_devices(&usb_profiles),
+            get_pci_devices(pci_profiles.as_slice()),
+            get_usb_devices(usb_profiles.as_slice()),
         ) {
-            (Some(a), Some(b)) => {
+            (Some(hashmap_pci), Some(hashmap_usb)) => {
+                let mut hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)> =
+                    hashmap_pci.into_iter().collect();
+                hashmap_pci.sort_by(|a, b| {
+                    let a_class = t!(format!("pci_class_name_{}", a.0))
+                        .to_string()
+                        .to_lowercase();
+                    let b_class = t!(format!("pci_class_name_{}", b.0))
+                        .to_string()
+                        .to_lowercase();
+                    b_class.cmp(&a_class)
+                });
+                let mut hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)> =
+                    hashmap_usb.into_iter().collect();
+                hashmap_usb.sort_by(|a, b| {
+                    let a_class = t!(format!("usb_class_name_{}", a.0))
+                        .to_string()
+                        .to_lowercase();
+                    let b_class = t!(format!("usb_class_name_{}", b.0))
+                        .to_string()
+                        .to_lowercase();
+                    b_class.cmp(&a_class)
+                });
                 status_sender
-                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(a, b))
+                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb, pci_profiles, usb_profiles))
                     .expect("Channel closed");
             }
             (_, _) => {

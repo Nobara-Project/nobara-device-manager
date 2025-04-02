@@ -1,21 +1,99 @@
 use crate::{config::*, ChannelMsg};
 use libcfhdb::usb::*;
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+};
+
+pub struct PreCheckedUsbDevice {
+    pub device: CfhdbUsbDevice,
+    pub profiles: Vec<Arc<PreCheckedUsbProfile>>,
+}
+
+pub struct PreCheckedUsbProfile {
+    profile: CfhdbUsbProfile,
+    installed: Arc<Mutex<bool>>,
+}
+
+impl PreCheckedUsbProfile {
+    pub fn new(profile: CfhdbUsbProfile) -> Self {
+        Self {
+            profile,
+            installed: Arc::new(Mutex::new(false)),
+        }
+    }
+    pub fn profile(&self) -> CfhdbUsbProfile {
+        self.profile.clone()
+    }
+    pub fn installed(&self) -> bool {
+        self.installed.lock().unwrap().clone()
+    }
+    pub fn update_installed(&self) {
+        *self.installed.lock().unwrap() = self.profile.get_status();
+    }
+}
 
 pub fn get_usb_devices(
-    profiles: &Vec<CfhdbUsbProfile>,
-) -> Option<HashMap<String, Vec<CfhdbUsbDevice>>> {
+    profiles: &[Arc<PreCheckedUsbProfile>],
+) -> Option<HashMap<String, Vec<PreCheckedUsbDevice>>> {
     match CfhdbUsbDevice::get_devices() {
         Some(devices) => {
-            for i in &devices {
-                CfhdbUsbDevice::set_available_profiles(&profiles, &i);
-            }
             let hashmap = CfhdbUsbDevice::create_class_hashmap(devices);
-            return Some(hashmap);
+            return Some(
+                hashmap
+                    .iter()
+                    .map(move |x| {
+                        let mut pre_checked_devices = vec![];
+                        for i in x.1 {
+                            pre_checked_devices.push(get_pre_checked_device(profiles, i.clone()));
+                        }
+                        (x.0.clone(), pre_checked_devices)
+                    })
+                    .collect(),
+            );
         }
         None => return None,
     }
 }
+
+fn get_pre_checked_device(
+    profile_data: &[Arc<PreCheckedUsbProfile>],
+    device: CfhdbUsbDevice,
+) -> PreCheckedUsbDevice {
+    let mut available_profiles = vec![];
+    for profile_arc in profile_data.iter() {
+        let profile = profile_arc.profile();
+        let matching = {
+            if (profile.blacklisted_class_codes.contains(&"*".to_owned())
+                || profile.blacklisted_class_codes.contains(&device.class_code))
+                || (profile.blacklisted_vendor_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_vendor_ids.contains(&device.vendor_id))
+                || (profile.blacklisted_product_ids.contains(&"*".to_owned())
+                    || profile.blacklisted_product_ids.contains(&device.product_id))
+            {
+                false
+            } else {
+                (profile.class_codes.contains(&"*".to_owned())
+                    || profile.class_codes.contains(&device.class_code))
+                    && (profile.vendor_ids.contains(&"*".to_owned())
+                        || profile.vendor_ids.contains(&device.vendor_id))
+                    && (profile.product_ids.contains(&"*".to_owned())
+                        || profile.product_ids.contains(&device.product_id))
+            }
+        };
+
+        if matching {
+            available_profiles.push(profile_arc.clone());
+        }
+    }
+    PreCheckedUsbDevice {
+        device,
+        profiles: available_profiles,
+    }
+}
+
 pub fn get_usb_profiles_from_url(
     sender: &async_channel::Sender<ChannelMsg>,
 ) -> Result<Vec<CfhdbUsbProfile>, std::io::Error> {
@@ -157,7 +235,7 @@ pub fn get_usb_profiles_from_url(
                 None => Some(
                     profile["packages"]
                         .as_array()
-                        .expect("invalid_usb_profile_class_ids")
+                        .expect("invalid_usb_profile_class_codes")
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
                         .collect(),
@@ -185,6 +263,7 @@ pub fn get_usb_profiles_from_url(
             };
             let experimental = profile["experimental"].as_bool().unwrap_or_default();
             let removable = profile["removable"].as_bool().unwrap_or_default();
+            let veiled = profile["veiled"].as_bool().unwrap_or_default();
             let priority = profile["priority"].as_i64().unwrap_or_default();
             // Parse into the Struct
             let profile_struct = CfhdbUsbProfile {
@@ -204,6 +283,7 @@ pub fn get_usb_profiles_from_url(
                 remove_script,
                 experimental,
                 removable,
+                veiled,
                 priority: priority as i32,
             };
             profiles_array.push(profile_struct);

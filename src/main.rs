@@ -1,19 +1,22 @@
 mod config;
 
 use adw::{prelude::*, *};
+use cfhdb::{pci::{PreCheckedPciDevice, PreCheckedPciProfile}, usb::{PreCheckedUsbDevice, PreCheckedUsbProfile}};
 use gdk::Display;
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
-use libcfhdb::{pci::CfhdbPciDevice, usb::CfhdbUsbDevice};
-use std::{collections::HashMap, env};
+use std::{env, sync::Arc};
 
 use config::APP_ID;
 
 pub enum ChannelMsg {
     OutputLine(String),
     SuccessMsg,
+    UpdateMsg,
     SuccessMsgDeviceFetch(
-        HashMap<String, Vec<CfhdbPciDevice>>,
-        HashMap<String, Vec<CfhdbUsbDevice>>,
+        Vec<(String, Vec<PreCheckedPciDevice>)>,
+        Vec<(String, Vec<PreCheckedUsbDevice>)>,
+        Vec<Arc<PreCheckedPciProfile>>,
+        Vec<Arc<PreCheckedUsbProfile>>,
     ),
     FailMsg,
 }
