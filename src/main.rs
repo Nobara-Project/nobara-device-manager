@@ -5,6 +5,7 @@ use cfhdb::{pci::{PreCheckedPciDevice, PreCheckedPciProfile}, usb::{PreCheckedUs
 use gdk::Display;
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use std::{env, sync::Arc};
+use sys_locale::get_locale;
 
 use config::APP_ID;
 
