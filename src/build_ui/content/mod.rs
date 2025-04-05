@@ -745,7 +745,7 @@ fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &g
                     &update_device_status_action,
                     &profile,
                     &pci_profiles_clone0,
-                    "install",
+                    "remove",
                 );
             }
         ));
