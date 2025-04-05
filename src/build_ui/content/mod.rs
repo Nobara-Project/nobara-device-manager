@@ -635,6 +635,10 @@ fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &g
         .extra_child(&scroll)
         .heading(t!(format!("all_profile_dialog_heading")))
         .build();
+    dialog.add_response(
+        "dialog_ok",
+        &t!("profile_install_dialog_ok_label").to_string(),
+    );
     let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let pci_profiles_clone0 = pci_profiles.clone();
     let pci_profiles_clone1: Vec<Arc<PreCheckedPciProfile>> = pci_profiles.iter().map(|f| f.clone()).collect();
@@ -873,7 +877,7 @@ fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &g
                     &update_device_status_action,
                     &profile,
                     &usb_profiles_clone0,
-                    "install",
+                    "remove",
                 );
             }
         ));
