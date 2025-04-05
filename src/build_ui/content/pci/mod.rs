@@ -473,7 +473,7 @@ fn pci_device_page(
                     &update_device_status_action,
                     &profile,
                     &profiles_rc,
-                    "install",
+                    "remove",
                 );
             }
         ));
