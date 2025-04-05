@@ -1,9 +1,9 @@
 // GTK
 
-pub const APP_ID: &str = "com.github.nobara-project.nobaradevicemanager";
+pub const APP_ID: &str = "com.github.nobara-project.nobaradrivermanager";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
-pub const APP_ICON: &str = "com.github.nobara-project.nobaradevicemanager";
-pub const APP_GIT: &str = "https://git.nobara-os.com/custom-gui-packages/nobara-device-manager";
+pub const APP_ICON: &str = "com.github.nobara-project.nobaradrivermanager";
+pub const APP_GIT: &str = "https://git.nobara-os.com/custom-gui-packages/nobara-driver-manager";
 
 // CFHDB
 

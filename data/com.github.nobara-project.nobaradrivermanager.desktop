@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=Nobara Device Manager
-Exec=nobara-device-manager
-Icon=com.github.nobara-project.nobaradevicemanager
+Name=Nobara Driver Manager
+Exec=nobara-driver-manager
+Icon=com.github.nobara-project.nobaradrivermanager
 Terminal=false
 Type=Application
 Encoding=UTF-8
