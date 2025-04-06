@@ -1,10 +1,4 @@
-pika-device-manager (0.1.0-101pika10) pika; urgency=medium
-
-  * Add lazy loading and UI performance improvements to content module
-
- -- ferreo <harderthanfire@gmail.com>  Wed, 18 Jan 2023 21:48:14 +0000
-
-pika-device-manager (0.1.0-101pika9) pika; urgency=medium
+pika-device-manager (0.1.0-101pika11) pika; urgency=medium
 
   * Smol dep fixes
 
