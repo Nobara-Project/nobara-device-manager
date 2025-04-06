@@ -16,7 +16,7 @@ Rules-Requires-Root: no
 
 Package: pika-device-manager
 Architecture: linux-any
-Depends: ${misc:Depends}, cfhdb, ${shlibs:Depends}
+Depends: ${misc:Depends}, cfhdb, ${shlibs:Depends}, usbutils, pciutils
 Conflicts: pika-drivers
 Replaces: pika-drivers
 Provides: pika-drivers
