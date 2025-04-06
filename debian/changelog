@@ -1,3 +1,9 @@
+pika-device-manager (0.1.0-101pika9) pika; urgency=medium
+
+  * Smol dep fixes
+
+ -- ferreo <harderthanfire@gmail.com>  Wed, 18 Jan 2023 21:48:14 +0000
+
 pika-device-manager (0.1.0-101pika8) pika; urgency=medium
 
   * Initial release.
