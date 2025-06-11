@@ -14,6 +14,14 @@ mkdir -p pika-device-manager
 cp -rvf ./* ./pika-device-manager/ || true
 cd ./pika-device-manager/
 
+# Cut empty locales
+apt-get install jq -y
+for i in ./locales/*.json
+do
+    echo "Cutting down $i"
+    jq 'del(.[] | select(. == ""))' $i > /tmp/tmp-locales.json && mv /tmp/tmp-locales.json $i
+done
+
 # Get build deps
 apt-get build-dep ./ -y
 apt-get install curl -y
