@@ -1,3 +1,9 @@
+pika-device-manager (0.1.1-101pika1) pika; urgency=medium
+
+  * Add Global Menu, Refine Sidebar and remove Ferreo's annoying change to it XD
+
+ -- ferreo <harderthanfire@gmail.com>  Wed, 18 Jan 2023 21:48:14 +0000
+
 pika-device-manager (0.1.0-101pika12) pika; urgency=medium
 
   * Add lazy loading and UI performance improvements to content module

@@ -21,7 +21,7 @@ use gtk::{
 };
 use rayon::prelude::*;
 
-pub fn loading_content(window: &ApplicationWindow) {
+pub fn loading_content(window: &ApplicationWindow, about_action: &gio::SimpleAction, showallprofiles_action: &gio::SimpleAction) {
     let (status_sender, status_receiver) = async_channel::unbounded::<ChannelMsg>();
     let loading_box = gtk::Box::builder()
         .orientation(Orientation::Vertical)
@@ -79,6 +79,10 @@ pub fn loading_content(window: &ApplicationWindow) {
         loading_label,
         #[strong]
         loading_label,
+        #[strong]
+        about_action,
+        #[strong]
+        showallprofiles_action,
         async move {
             while let Ok(state) = status_receiver.recv().await {
                 match state {
@@ -86,7 +90,7 @@ pub fn loading_content(window: &ApplicationWindow) {
                         loading_label.set_label(&output_str);
                     }
                     ChannelMsg::SuccessMsgDeviceFetch(hashmap_pci, hashmap_usb, pci_profiles, usb_profiles) => {
-                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb, pci_profiles, usb_profiles)));
+                        window.set_content(Some(&main_content(&window, hashmap_pci, hashmap_usb, pci_profiles, usb_profiles, &about_action, &showallprofiles_action)));
                     }
                     ChannelMsg::FailMsg => {}
                     ChannelMsg::SuccessMsg | ChannelMsg::UpdateMsg => {

@@ -1,9 +1,10 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{Button, Orientation, PolicyType};
+use gtk::{ListBox, ListBoxRow, Orientation, PolicyType, glib::clone};
 
 pub fn main_content_sidebar(
-    pci_buttons: &Vec<Button>,
-    usb_buttons: &Vec<Button>,
+    stack: &gtk::Stack,
+    pci_rows: &Vec<ListBoxRow>,
+    usb_rows: &Vec<ListBoxRow>,
 ) -> adw::ToolbarView {
     let main_content_sidebar_box = gtk::Box::builder()
         .orientation(Orientation::Vertical)
@@ -32,6 +33,18 @@ pub fn main_content_sidebar(
             .build(),
     );
 
+    //
+
+    let pci_rows_listbox = ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .build();
+    pci_rows_listbox.add_css_class("navigation-sidebar");
+
+    let usb_rows_listbox = ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .build();
+    usb_rows_listbox.add_css_class("navigation-sidebar");
+
     // PCI Devices Section
     let pci_label = gtk::Label::builder()
         .label(&t!("pci_devices").to_string())
@@ -41,12 +54,24 @@ pub fn main_content_sidebar(
         .margin_bottom(4)
         .build();
     pci_label.add_css_class("heading");
-    
+
     main_content_sidebar_box.append(&pci_label);
+    main_content_sidebar_box.append(&pci_rows_listbox);
+
+    let mut is_first = true;
     
-    for button in pci_buttons {
-        main_content_sidebar_box.append(button);
+    for row in pci_rows {
+        pci_rows_listbox.append(row);
+        if is_first {
+            pci_rows_listbox.select_row(Some(row));
+            is_first = false
+        }
     }
+
+    pci_rows_listbox.connect_row_activated(clone!(#[strong] usb_rows_listbox, #[strong] stack, move |_, row| {
+        usb_rows_listbox.select_row(None::<&ListBoxRow>);
+        stack.set_visible_child_name(&row.widget_name());
+    }));
     
     // Separator between sections
     let separator = gtk::Separator::builder()
@@ -65,12 +90,18 @@ pub fn main_content_sidebar(
         .margin_bottom(4)
         .build();
     usb_label.add_css_class("heading");
-    
+
     main_content_sidebar_box.append(&usb_label);
+    main_content_sidebar_box.append(&usb_rows_listbox);
     
-    for button in usb_buttons {
-        main_content_sidebar_box.append(button);
+    for row in usb_rows {
+        usb_rows_listbox.append(row);
     }
+
+    usb_rows_listbox.connect_row_activated(clone!(#[strong] pci_rows_listbox, #[strong] stack, move |_, row| {
+        pci_rows_listbox.select_row(None::<&ListBoxRow>);
+        stack.set_visible_child_name(&row.widget_name());
+    }));
 
     main_content_sidebar_toolbar
 }

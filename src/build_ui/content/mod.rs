@@ -30,6 +30,8 @@ pub fn main_content(
     hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
+    about_action: &gtk::gio::SimpleAction,
+    showallprofiles_action: &gtk::gio::SimpleAction,
 ) -> adw::OverlaySplitView {
     // Start timing the UI building process
     let ui_start = std::time::Instant::now();
@@ -77,9 +79,8 @@ pub fn main_content(
     
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
 
-    let mut is_first = true;
-    let mut pci_buttons = vec![];
-    let mut usb_buttons = vec![];
+    let mut pci_rows = vec![];
+    let mut usb_rows = vec![];
 
     let pci_profiles_rc = Rc::new(pci_profiles);
     let usb_profiles_rc = Rc::new(usb_profiles);
@@ -99,6 +100,9 @@ pub fn main_content(
             dialog.present(Some(&window));
         }
     ));
+    showallprofiles_action.connect_activate(clone!(#[strong] all_profiles_button, move |_, _| {
+        all_profiles_button.emit_clicked();
+    }));
 
     theme_changed_thread(&theme_changed_action);
 
@@ -145,20 +149,12 @@ pub fn main_content(
             placeholder.append(&content);
         });
 
-        pci_buttons.push(custom_stack_selection_button(
-            &window_stack,
-            if is_first {
-                is_first = false;
-                true
-            } else {
-                false
-            },
+        pci_rows.push(custom_stack_selection_button(
             class.clone(),
             class_i18n,
             get_icon_for_class(&class)
                 .unwrap_or("dialog-question-symbolic")
                 .into(),
-            &sidebar_toggle,
         ));
     }
 
@@ -204,20 +200,12 @@ pub fn main_content(
             placeholder.append(&content);
         });
 
-        usb_buttons.push(custom_stack_selection_button(
-            &window_stack,
-            if is_first {
-                is_first = false;
-                true
-            } else {
-                false
-            },
+        usb_rows.push(custom_stack_selection_button(
             class.clone(),
             class_i18n,
             get_icon_for_class(&class)
                 .unwrap_or("dialog-question-symbolic")
                 .into(),
-            &sidebar_toggle,
         ));
     }
 
@@ -229,10 +217,11 @@ pub fn main_content(
         &window_breakpoint,
         all_profiles_button.clone(),
         sidebar_toggle.clone(),
+        &about_action
     )));
 
     main_content_overlay_split_view
-        .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));
+        .set_sidebar(Some(&main_content_sidebar(&window_stack, &pci_rows, &usb_rows)));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
@@ -483,16 +472,17 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
 }
 
 fn custom_stack_selection_button(
-    stack: &gtk::Stack,
-    active: bool,
     name: String,
     title: String,
     icon: String,
-    toggle_sidebar: &gtk::ToggleButton,
-) -> gtk::Button {
+) -> gtk::ListBoxRow {
     // Create a box to hold the icon and label with proper spacing
     let button_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
+        .margin_top(4)
+        .margin_bottom(4)
+        .margin_start(8)
+        .margin_end(8)
         .spacing(8)
         .build();
     
@@ -514,36 +504,13 @@ fn custom_stack_selection_button(
     button_box.append(&label);
     
     // Create the button with the box as its child
-    let button = gtk::Button::builder()
+    let listboxrow = gtk::ListBoxRow::builder()
         .child(&button_box)
         .tooltip_text(&title)
-        .margin_top(4)
-        .margin_bottom(4)
-        .margin_start(8)
-        .margin_end(8)
+        .name(name)
         .build();
     
-    // Add CSS class for styling
-    button.add_css_class("flat");
-    
-    let name_clone = name.clone();
-    button.connect_clicked(clone!(
-        #[weak]
-        stack,
-        #[weak]
-        toggle_sidebar,
-        move |_| {
-            stack.set_visible_child_name(&name_clone);
-            toggle_sidebar.set_active(false);
-        }
-    ));
-    
-    if active {
-        stack.set_visible_child_name(&name);
-        button.add_css_class("sidebar-active-button");
-    }
-    
-    button
+    listboxrow
 }
 
 pub fn run_in_lock_script(
