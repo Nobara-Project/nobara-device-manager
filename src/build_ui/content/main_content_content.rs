@@ -1,5 +1,5 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{glib::clone, Stack, Button, ToggleButton};
+use gtk::{glib::clone, Button, Stack, ToggleButton};
 
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 
@@ -22,7 +22,7 @@ pub fn main_content_content(
         .top_bar_style(ToolbarStyle::Flat)
         .bottom_bar_style(ToolbarStyle::Flat)
         .build();
-    
+
     // Use the provided sidebar toggle button
     let _sidebar_toggle_button_binding = main_content_overlay_split_view
         .bind_property("show_sidebar", &sidebar_toggle_button, "active")
@@ -41,7 +41,11 @@ pub fn main_content_content(
     window_toolbar
 }
 
-fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::HeaderBar, about_action: &gtk::gio::SimpleAction) {
+fn credits_window(
+    window: &adw::ApplicationWindow,
+    window_headerbar: &adw::HeaderBar,
+    about_action: &gtk::gio::SimpleAction,
+) {
     let credits_button = gtk::Button::builder()
         .icon_name("dialog-information-symbolic")
         .tooltip_text(t!("credits_button_label"))
@@ -64,9 +68,11 @@ fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::Heade
         credits_window,
         move |_| credits_window.present(Some(&window))
     ));
-	about_action.connect_activate(clone!(#[strong] window, move |_, _| {
-        credits_window.present(Some(&window))
-    }));
+    about_action.connect_activate(clone!(
+        #[strong]
+        window,
+        move |_, _| credits_window.present(Some(&window))
+    ));
 }
 
 pub fn error_dialog(window: adw::ApplicationWindow, heading: &str, error: &str) {

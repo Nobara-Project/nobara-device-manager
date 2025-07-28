@@ -1,8 +1,7 @@
 use crate::{
     build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle},
     cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile},
-    config::distro_package_manager,
-    ChannelMsg,
+    pikd::{get_current_font, run_addon_command, wrap_text, PikChannel},
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -16,9 +15,7 @@ use gtk::{
 use libcfhdb::pci::CfhdbPciDevice;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
 
-use users::get_current_username;
-
-use super::{error_dialog, run_in_lock_script};
+use super::error_dialog;
 
 pub fn create_pci_class(
     window: &ApplicationWindow,
@@ -455,6 +452,8 @@ fn pci_device_page(
             profile,
             #[strong]
             profiles_rc,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 profile_modify(
                     window.clone(),
@@ -462,6 +461,7 @@ fn pci_device_page(
                     &profile,
                     &profiles_rc,
                     "install",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -474,6 +474,8 @@ fn pci_device_page(
             profile,
             #[strong]
             profiles_rc,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 profile_modify(
                     window.clone(),
@@ -481,6 +483,7 @@ fn pci_device_page(
                     &profile,
                     &profiles_rc,
                     "remove",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -625,174 +628,503 @@ pub fn profile_modify(
     profile: &Arc<PreCheckedPciProfile>,
     all_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>,
     opreation: &str,
+    theme_changed_action: &gio::SimpleAction
 ) {
-    let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
-    let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
-
     let profile_content = profile.profile();
-
-    let profile_modify_log_terminal_buffer = gtk::TextBuffer::builder().build();
-
-    let profile_modify_log_terminal = gtk::TextView::builder()
-        .vexpand(true)
-        .hexpand(true)
-        .editable(false)
-        .buffer(&profile_modify_log_terminal_buffer)
-        .build();
-
-    let profile_modify_log_terminal_scroll = gtk::ScrolledWindow::builder()
-        .width_request(400)
-        .height_request(200)
-        .vexpand(true)
-        .hexpand(true)
-        .child(&profile_modify_log_terminal)
-        .build();
-
-    let profile_modify_dialog = adw::AlertDialog::builder()
-        .extra_child(&profile_modify_log_terminal_scroll)
-        .width_request(400)
-        .height_request(200)
-        .heading(t!(format!("profile_{}_dialog_heading", opreation)))
-        .can_close(false)
-        .build();
-    profile_modify_dialog.add_response(
-        "profile_modify_dialog_ok",
-        &t!(format!("profile_{}_dialog_ok_label", opreation)).to_string(),
-    );
-    profile_modify_dialog.add_response(
-        "profile_modify_dialog_reboot",
-        &t!(format!("profile_{}_dialog_reboot_label", opreation)).to_string(),
-    );
-    profile_modify_dialog.set_response_appearance(
-        "profile_modify_dialog_reboot",
-        adw::ResponseAppearance::Suggested,
-    );
-
-    //
 
     let string_opreation = String::from(opreation);
 
-    thread::spawn(clone!(
+    //
+
+    let (process_log_sender, process_log_receiver) = async_channel::unbounded();
+
+    let log_file_path = format!(
+        "/tmp/cfhdb-opreation_{}.log",
+        chrono::offset::Local::now().format("%Y-%m-%d_%H:%M")
+    );
+
+
+    let pikd_dialog_child_box = gtk::Box::builder().orientation(Orientation::Vertical).build();
+
+    let pikd_dialog_progress_bar = circularprogressbar_rs::CircularProgressBar::new();
+    pikd_dialog_progress_bar.set_line_width(10.0);
+    pikd_dialog_progress_bar.set_fill_radius(true);
+    pikd_dialog_progress_bar.set_hexpand(true);
+    pikd_dialog_progress_bar.set_vexpand(true);
+    pikd_dialog_progress_bar.set_width_request(200);
+    pikd_dialog_progress_bar.set_height_request(200);
+    #[allow(deprecated)]
+    pikd_dialog_progress_bar.set_progress_fill_color(
+        window
+            .style_context()
+            .lookup_color("accent_bg_color")
+            .unwrap(),
+    );
+    #[allow(deprecated)]
+    pikd_dialog_progress_bar.set_radius_fill_color(
+        window
+            .style_context()
+            .lookup_color("headerbar_bg_color")
+            .unwrap(),
+    );
+    #[warn(deprecated)]
+    pikd_dialog_progress_bar.set_progress_font(get_current_font());
+    pikd_dialog_progress_bar.set_center_text(t!("progress_bar_circle_center_text"));
+    pikd_dialog_progress_bar.set_fraction_font_size(24);
+    pikd_dialog_progress_bar.set_center_text_font_size(8);
+    theme_changed_action.connect_activate(clone!(
         #[strong]
-        profile_content,
+        window,
         #[strong]
-        string_opreation,
-        move || {
-            let script = match string_opreation.as_str() {
-                "install" => profile_content.install_script,
-                "remove" => profile_content.remove_script,
-                _ => panic!(),
-            };
-            match script {
-                Some(t) => match profile_content.packages {
-                    Some(a) => {
-                        let package_list = a.join(" ");
-                        let modify_command =
-                            distro_package_manager(&string_opreation, &package_list);
-                        run_in_lock_script(
-                            &log_loop_sender,
-                            &format!("#! /bin/bash\nset -e\n{}\n{}", modify_command, t),
-                        );
-                    }
-                    None => {
-                        run_in_lock_script(
-                            &log_loop_sender,
-                            &format!("#! /bin/bash\nset -e\n{}", t),
-                        );
-                    }
-                },
-                None => match profile_content.packages {
-                    Some(a) => {
-                        let package_list = a.join(" ");
-                        let modify_command =
-                            distro_package_manager(&string_opreation, &package_list);
-                        run_in_lock_script(
-                            &log_loop_sender,
-                            &format!("#! /bin/bash\nset -e\n{}", modify_command),
-                        );
-                    }
-                    None => {
-                        log_loop_sender
-                            .send_blocking(ChannelMsg::SuccessMsg)
-                            .unwrap();
-                    }
-                },
-            }
+        pikd_dialog_progress_bar,
+        move |_, _| {
+            #[allow(deprecated)]
+            pikd_dialog_progress_bar.set_progress_fill_color(
+                window
+                    .style_context()
+                    .lookup_color("accent_bg_color")
+                    .unwrap(),
+            );
+            #[allow(deprecated)]
+            pikd_dialog_progress_bar.set_radius_fill_color(
+                window
+                    .style_context()
+                    .lookup_color("headerbar_bg_color")
+                    .unwrap(),
+            );
+            #[warn(deprecated)]
+            pikd_dialog_progress_bar.set_progress_font(get_current_font());
         }
     ));
 
-    let log_loop_context = MainContext::default();
+    let apt_speed_label = gtk::Label::builder()
+        .halign(Align::Center)
+        .margin_top(10)
+        .margin_bottom(10)
+        .width_request(150)
+        .height_request(150)
+        .build();
+
+    pikd_dialog_child_box.append(&pikd_dialog_progress_bar);
+    pikd_dialog_child_box.append(&apt_speed_label);
+
+    let pikd_dialog = adw::AlertDialog::builder()
+        .extra_child(&pikd_dialog_child_box)
+        .heading(match string_opreation.as_str() {
+            "install" => t!("profile_install_dialog_heading"),
+            _ => t!("profile_remove_dialog_heading")
+        })
+        .width_request(600)
+        .height_request(600)
+        .build();
+
+    pikd_dialog.add_response("pikd_dialog_ok", &t!("profile_install_dialog_ok_label").to_string());
+    pikd_dialog.add_response("pikd_dialog_reboot", &t!("profile_install_dialog_reboot_label").to_string());
+
+    let pikd_dialog_child_box_done = gtk::Box::builder().orientation(Orientation::Vertical).build();
+
+    let pikd_log_image = gtk::Image::builder()
+        .pixel_size(128)
+        .halign(Align::Center)
+        .build();
+
+    let pikd_log_button = gtk::Button::builder()
+        .label(t!("pikd_dialog_open_log_file"))
+        .halign(Align::Center)
+        .margin_start(15)
+        .margin_end(15)
+        .margin_top(15)
+        .margin_bottom(15)
+        .build();
+
+    pikd_dialog_child_box_done.append(&pikd_log_image);
+    pikd_dialog_child_box_done.append(&pikd_log_button);
+
+    pikd_dialog.set_response_enabled("pikd_dialog_ok", false);
+    pikd_dialog.set_close_response("pikd_dialog_ok");
+
+    pikd_dialog.set_response_enabled("pikd_dialog_reboot", false);
+
+    let process_log_context = MainContext::default();
     // The main loop executes the asynchronous block
-    log_loop_context.spawn_local(clone!(
+    process_log_context.spawn_local(clone!(
+        #[weak]
+        pikd_dialog_progress_bar,
+        #[weak]
+        apt_speed_label,
+        #[weak]
+        pikd_dialog,
+        #[weak]
+        pikd_dialog_child_box,
         #[strong]
-        profile_modify_log_terminal_buffer,
+        pikd_dialog_child_box_done,
         #[strong]
-        profile_modify_dialog,
+        pikd_log_image,
+        #[strong]
+        update_device_status_action,
         #[strong]
         string_opreation,
         async move {
-            while let Ok(state) = log_loop_receiver.recv().await {
+            while let Ok(state) = process_log_receiver.recv().await {
                 match state {
-                    ChannelMsg::OutputLine(line) => profile_modify_log_terminal_buffer.insert(
-                        &mut profile_modify_log_terminal_buffer.end_iter(),
-                        &("\n".to_string() + &line),
-                    ),
-                    ChannelMsg::SuccessMsg => {
-                        if get_current_username().unwrap() == "pikaos" {
-                            profile_modify_dialog
-                                .set_response_enabled("profile_modify_dialog_reboot", false);
+                    PikChannel::Status(status) => {
+                        if status {
+                            pikd_dialog_child_box.set_visible(false);
+                            pikd_log_image.set_icon_name(Some("face-cool-symbolic"));
+                            pikd_dialog.set_extra_child(Some(&pikd_dialog_child_box_done));
+                            pikd_dialog
+                                .set_title(&match string_opreation.as_str() {
+                                    "install" => t!("profile_install_dialog_body_successful").to_string(),
+                                    _ => t!("profile_install_dialog_body_failed").to_string()
+                                });
+                            pikd_dialog.set_response_enabled("pikd_dialog_ok", true);
                         } else {
-                            profile_modify_dialog
-                                .set_response_enabled("profile_modify_dialog_reboot", true);
+                            pikd_dialog_child_box.set_visible(false);
+                            pikd_log_image.set_icon_name(Some("dialog-error-symbolic"));
+                            pikd_dialog.set_extra_child(Some(&pikd_dialog_child_box_done));
+                            pikd_dialog
+                                .set_title(&match string_opreation.as_str() {
+                                    "install" => t!("profile_remove_dialog_body_successful").to_string(),
+                                    _ => t!("profile_remove_dialog_body_failed").to_string(),
+                                });
+                            pikd_dialog.set_response_enabled("pikd_dialog_ok", true);
+                            pikd_dialog.set_response_enabled("pikd_dialog_open_log_file", true);
                         }
-                        profile_modify_dialog
-                            .set_response_enabled("profile_modify_dialog_ok", true);
-                        profile_modify_dialog.set_body(
-                            &t!(format!(
-                                "profile_{}_dialog_body_successful",
-                                &string_opreation
-                            ))
-                            .to_string(),
+                        update_device_status_action.activate(None);
+                    }
+                    PikChannel::DownloadStats(stats) => {
+                        pikd_dialog_progress_bar.set_fraction(stats.total_percent / 100.0);
+                        let total_downloaded =
+                            format!("{} {}", stats.total_downloaded.0, stats.total_downloaded.1);
+                        let total_size =
+                            format!("{} {}", stats.total_size.0.to_string(), stats.total_size.1);
+                        let total_speed = format!(
+                            "{} {}",
+                            stats.total_speed.0.to_string(),
+                            stats.total_speed.1
                         );
+                        pikd_dialog.set_body(&wrap_text(
+                            &format!(
+                                "{}: {}% ({} out of {}, {})",
+                                t!("pikd_dialog_total"),
+                                stats.total_percent,
+                                total_downloaded,
+                                total_size,
+                                total_speed
+                            ),
+                            30,
+                        ));
+                        let package_downloaded = format!(
+                            "{} {}",
+                            stats.package_downloaded.0.to_string(),
+                            stats.package_downloaded.1
+                        );
+                        let package_size = format!(
+                            "{} {}",
+                            stats.package_size.0.to_string(),
+                            stats.package_size.1
+                        );
+                        let package_speed = format!(
+                            "{} {}",
+                            stats.package_speed.0.to_string(),
+                            stats.package_speed.1
+                        );
+                        apt_speed_label.set_label(&wrap_text(
+                            &format!(
+                                "{}: {}% ({} out of {}, {})",
+                                stats.package_name,
+                                stats.package_percent,
+                                package_downloaded,
+                                package_size,
+                                package_speed
+                            ),
+                            30,
+                        ));
                     }
-                    ChannelMsg::FailMsg => {
-                        profile_modify_dialog
-                            .set_response_enabled("profile_modify_dialog_ok", true);
-                        profile_modify_dialog.set_body(&t!(format!(
-                            "profile_{}_dialog_body_failed",
-                            &string_opreation
-                        )
-                        .to_string()));
-                        profile_modify_dialog
-                            .set_response_enabled("profile_modify_dialog_reboot", false);
-                    }
-                    ChannelMsg::SuccessMsgDeviceFetch(..) | ChannelMsg::UpdateMsg => {
-                        panic!();
-                    }
+                    PikChannel::InfoMessage(msg) => apt_speed_label.set_label(&wrap_text(&msg, 30)),
                 }
             }
         }
     ));
 
-    profile_modify_dialog.set_response_enabled("profile_modify_dialog_ok", false);
-    profile_modify_dialog.set_response_enabled("profile_modify_dialog_reboot", false);
+    pikd_log_button.connect_clicked(clone!(
+        #[strong]
+        log_file_path,
+        move |_| {
+        let _ = Command::new("xdg-open")
+            .arg(log_file_path.to_owned())
+            .spawn();
+    }));
+
+    thread::spawn(clone!(
+        #[strong]
+        profile_content,
+        #[strong]
+        process_log_sender,
+        #[strong]
+        log_file_path,
+        move || {
+            //
+            let process_log_sender_clone0 = process_log_sender.clone();
+            let process_log_sender_clone1 = process_log_sender.clone();
+            let log_file_path_clone0 = log_file_path.clone();
+            match string_opreation.as_str() {
+                "install" => {
+                    let script = profile_content.install_script;
+                    match script {
+                        Some(t) => match profile_content.packages {
+                            Some(a) => {
+                                let package_list = a.join(" ");
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+echo "DOWNLOAD {PLIST}" | nc -U /var/run/pik.sock
+echo "INSTALL {PLIST}" | nc -U /var/run/pik.sock
+                                
+{PRESC}
+                                "###,
+                                            PLIST = package_list,
+                                            PRESC = t
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                            None => {
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+{PRESC}
+                                "###,
+                                            PRESC = t
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                        },
+                        None => match profile_content.packages {
+                            Some(a) => {
+                                let package_list = a.join(" ");
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+echo "DOWNLOAD {PLIST}" | nc -U /var/run/pik.sock
+echo "INSTALL {PLIST}" | nc -U /var/run/pik.sock
+                                "###,
+                                            PLIST = package_list
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                            None => process_log_sender_clone1
+                                .send_blocking(PikChannel::Status(true))
+                                .unwrap(),
+                        },
+                    }
+                }
+                "remove" => {
+                    let script = profile_content.remove_script;
+                    match script {
+                        Some(t) => match profile_content.packages {
+                            Some(a) => {
+                                let package_list = a.join(" ");
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+echo "REMOVE --purge {PLIST}" | nc -U /var/run/pik.sock
+                                
+{PRESC}
+                                "###,
+                                            PLIST = package_list,
+                                            PRESC = t
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                            None => {
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+{PRESC}
+                                "###,
+                                            PRESC = t
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                        },
+                        None => match profile_content.packages {
+                            Some(a) => {
+                                let package_list = a.join(" ");
+                                let command = run_addon_command(
+                                    duct::cmd!(
+                                        "pkexec",
+                                        "bash",
+                                        "-c",
+                                        &format!(
+                                            r###"
+#! /bin/bash
+set -e
+                                
+echo "REMOVE --purge {PLIST}" | nc -U /var/run/pik.sock
+                                "###,
+                                            PLIST = package_list
+                                        )
+                                    ),
+                                    process_log_sender_clone0,
+                                    &log_file_path_clone0,
+                                );
+                                match command {
+                                    Ok(_) => {}
+                                    Err(_) => {
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::InfoMessage(
+                                                t!("pikd_dialog_status_error_perms").to_string(),
+                                            ))
+                                            .unwrap();
+                                        process_log_sender_clone1
+                                            .send_blocking(PikChannel::Status(false))
+                                            .unwrap()
+                                    }
+                                }
+                            }
+                            None => process_log_sender_clone1
+                                .send_blocking(PikChannel::Status(true))
+                                .unwrap(),
+                        },
+                    }
+                }
+                _ => panic!(),
+            };
+        }
+    ));
+
     let dialog_closure = clone!(
         #[strong]
-        profile_modify_dialog,
+        pikd_dialog,
         #[strong]
         all_profiles,
         #[strong]
         update_device_status_action,
         move |choice: glib::GString| {
             match choice.as_str() {
-                "profile_modify_dialog_reboot" => {
+                "pikd_dialog_reboot" => {
                     Command::new("systemctl")
                         .arg("reboot")
                         .spawn()
                         .expect("systemctl reboot failed to start");
                 }
                 _ => {
-                    profile_modify_dialog.force_close();
+                    pikd_dialog.force_close();
                     for a_profile in all_profiles.iter() {
                         a_profile.update_installed();
                     }
@@ -801,5 +1133,5 @@ pub fn profile_modify(
             }
         }
     );
-    profile_modify_dialog.choose(&window, gio::Cancellable::NONE, dialog_closure);
+    pikd_dialog.choose(&window, gio::Cancellable::NONE, dialog_closure);
 }

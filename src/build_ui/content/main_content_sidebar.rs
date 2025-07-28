@@ -1,5 +1,5 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{ListBox, ListBoxRow, Orientation, PolicyType, glib::clone};
+use gtk::{glib::clone, ListBox, ListBoxRow, Orientation, PolicyType};
 
 pub fn main_content_sidebar(
     stack: &gtk::Stack,
@@ -59,7 +59,7 @@ pub fn main_content_sidebar(
     main_content_sidebar_box.append(&pci_rows_listbox);
 
     let mut is_first = true;
-    
+
     for row in pci_rows {
         pci_rows_listbox.append(row);
         if is_first {
@@ -68,11 +68,17 @@ pub fn main_content_sidebar(
         }
     }
 
-    pci_rows_listbox.connect_row_activated(clone!(#[strong] usb_rows_listbox, #[strong] stack, move |_, row| {
-        usb_rows_listbox.select_row(None::<&ListBoxRow>);
-        stack.set_visible_child_name(&row.widget_name());
-    }));
-    
+    pci_rows_listbox.connect_row_activated(clone!(
+        #[strong]
+        usb_rows_listbox,
+        #[strong]
+        stack,
+        move |_, row| {
+            usb_rows_listbox.select_row(None::<&ListBoxRow>);
+            stack.set_visible_child_name(&row.widget_name());
+        }
+    ));
+
     // Separator between sections
     let separator = gtk::Separator::builder()
         .orientation(Orientation::Horizontal)
@@ -80,7 +86,7 @@ pub fn main_content_sidebar(
         .margin_bottom(12)
         .build();
     main_content_sidebar_box.append(&separator);
-    
+
     // USB Devices Section
     let usb_label = gtk::Label::builder()
         .label(&t!("usb_devices").to_string())
@@ -93,15 +99,21 @@ pub fn main_content_sidebar(
 
     main_content_sidebar_box.append(&usb_label);
     main_content_sidebar_box.append(&usb_rows_listbox);
-    
+
     for row in usb_rows {
         usb_rows_listbox.append(row);
     }
 
-    usb_rows_listbox.connect_row_activated(clone!(#[strong] pci_rows_listbox, #[strong] stack, move |_, row| {
-        pci_rows_listbox.select_row(None::<&ListBoxRow>);
-        stack.set_visible_child_name(&row.widget_name());
-    }));
+    usb_rows_listbox.connect_row_activated(clone!(
+        #[strong]
+        pci_rows_listbox,
+        #[strong]
+        stack,
+        move |_, row| {
+            pci_rows_listbox.select_row(None::<&ListBoxRow>);
+            stack.set_visible_child_name(&row.widget_name());
+        }
+    ));
 
     main_content_sidebar_toolbar
 }

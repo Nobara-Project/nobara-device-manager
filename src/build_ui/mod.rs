@@ -7,7 +7,7 @@ use crate::{
     build_ui::loading::loading_content,
     config::{APP_ICON, APP_ID},
 };
-use adw::{prelude::*, *, glib::clone};
+use adw::{glib::clone, prelude::*, *};
 
 pub fn build_ui(app: &adw::Application) {
     // setup glib
@@ -16,7 +16,7 @@ pub fn build_ui(app: &adw::Application) {
     //
     let glib_settings = gio::Settings::new(APP_ID);
 
-    // = Global Menu = 
+    // = Global Menu =
 
     let app_menu = gio::Menu::new();
     app.set_menubar(Some(&app_menu));
@@ -25,33 +25,39 @@ pub fn build_ui(app: &adw::Application) {
 
     let file_menu_item = gio::MenuItem::new(Some(&t!("file_menu_item_label")), None);
 
-	let file_menu = gio::Menu::new();
+    let file_menu = gio::Menu::new();
     file_menu_item.set_submenu(Some(&file_menu));
 
     file_menu.append(Some(&t!("file_menu_item_app_quit_label")), Some("app.quit"));
 
-	let quit_action = gio::SimpleAction::new("quit", None);
+    let quit_action = gio::SimpleAction::new("quit", None);
     app.add_action(&quit_action);
 
     // == View menu ==
 
     let view_menu_item = gio::MenuItem::new(Some(&t!("edit_menu_view_label")), None);
-    
+
     let view_menu = gio::Menu::new();
     view_menu_item.set_submenu(Some(&view_menu));
 
-    view_menu.append(Some(&t!("view_menu_item_app_showallprofiles")), Some("app.showallprofiles"));
-	let showallprofiles_action = gio::SimpleAction::new("showallprofiles", None);
+    view_menu.append(
+        Some(&t!("view_menu_item_app_showallprofiles")),
+        Some("app.showallprofiles"),
+    );
+    let showallprofiles_action = gio::SimpleAction::new("showallprofiles", None);
     app.add_action(&showallprofiles_action);
 
     // == Help menu ==
 
     let help_menu_item = gio::MenuItem::new(Some(&t!("help_menu_item_label")), None);
-    
+
     let help_menu = gio::Menu::new();
     help_menu_item.set_submenu(Some(&help_menu));
 
-    help_menu.append(Some(&t!("help_menu_item_app_about_label")), Some("app.about"));
+    help_menu.append(
+        Some(&t!("help_menu_item_app_about_label")),
+        Some("app.about"),
+    );
 
     let about_action = gio::SimpleAction::new("about", None);
     app.add_action(&about_action);
@@ -91,9 +97,13 @@ pub fn build_ui(app: &adw::Application) {
     // show the window
     window.present();
 
-	quit_action.connect_activate(clone!(#[strong] window, move |_, _| {
-        window.destroy();
-    }));
+    quit_action.connect_activate(clone!(
+        #[strong]
+        window,
+        move |_, _| {
+            window.destroy();
+        }
+    ));
 }
 
 pub fn save_window_size(window: &adw::ApplicationWindow, glib_settings: &gio::Settings) {

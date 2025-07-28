@@ -2,27 +2,21 @@ use std::{rc::Rc, sync::Arc};
 
 use adw::{prelude::*, AlertDialog};
 use gtk::gio::SimpleAction;
-use gtk::{
-    glib::clone,
-    Orientation,
-};
+use gtk::{glib::clone, Orientation};
 
 use crate::{
     build_ui::color_badge::ColorBadge,
-    cfhdb::{
-        pci::PreCheckedPciProfile,
-        usb::PreCheckedUsbProfile,
-    },
+    cfhdb::{pci::PreCheckedPciProfile, usb::PreCheckedUsbProfile},
 };
 
 use super::{pci, usb};
 
 pub fn all_profile_dialog(
-    window: adw::ApplicationWindow, 
-    update_device_status_action: &SimpleAction, 
-    theme_changed_action: &SimpleAction, 
-    pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>, 
-    usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>
+    window: adw::ApplicationWindow,
+    update_device_status_action: &SimpleAction,
+    theme_changed_action: &SimpleAction,
+    pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>,
+    usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>,
 ) -> AlertDialog {
     let boxedlist = gtk::ListBox::builder()
         .vexpand(true)
@@ -52,7 +46,8 @@ pub fn all_profile_dialog(
     );
     let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let pci_profiles_clone0 = pci_profiles.clone();
-    let pci_profiles_clone1: Vec<Arc<PreCheckedPciProfile>> = pci_profiles.iter().map(|f| f.clone()).collect();
+    let pci_profiles_clone1: Vec<Arc<PreCheckedPciProfile>> =
+        pci_profiles.iter().map(|f| f.clone()).collect();
     for profile in pci_profiles_clone1 {
         let profile_content = profile.profile();
         let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
@@ -135,6 +130,8 @@ pub fn all_profile_dialog(
             profile,
             #[strong]
             pci_profiles_clone0,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 pci::profile_modify(
                     window.clone(),
@@ -142,6 +139,7 @@ pub fn all_profile_dialog(
                     &profile,
                     &pci_profiles_clone0,
                     "install",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -154,6 +152,8 @@ pub fn all_profile_dialog(
             profile,
             #[strong]
             pci_profiles_clone0,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 pci::profile_modify(
                     window.clone(),
@@ -161,6 +161,7 @@ pub fn all_profile_dialog(
                     &profile,
                     &pci_profiles_clone0,
                     "remove",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -180,7 +181,8 @@ pub fn all_profile_dialog(
     }
     //
     let usb_profiles_clone0 = usb_profiles.clone();
-    let usb_profiles_clone1: Vec<Arc<PreCheckedUsbProfile>> = usb_profiles.iter().map(|f| f.clone()).collect();
+    let usb_profiles_clone1: Vec<Arc<PreCheckedUsbProfile>> =
+        usb_profiles.iter().map(|f| f.clone()).collect();
     for profile in usb_profiles_clone1 {
         let profile_content = profile.profile();
         let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
@@ -263,6 +265,8 @@ pub fn all_profile_dialog(
             profile,
             #[strong]
             usb_profiles_clone0,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 usb::profile_modify(
                     window.clone(),
@@ -270,6 +274,7 @@ pub fn all_profile_dialog(
                     &profile,
                     &usb_profiles_clone0,
                     "install",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -282,6 +287,8 @@ pub fn all_profile_dialog(
             profile,
             #[strong]
             usb_profiles_clone0,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 usb::profile_modify(
                     window.clone(),
@@ -289,6 +296,7 @@ pub fn all_profile_dialog(
                     &profile,
                     &usb_profiles_clone0,
                     "remove",
+                    &theme_changed_action,
                 );
             }
         ));

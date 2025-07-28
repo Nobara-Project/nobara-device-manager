@@ -67,7 +67,7 @@ pub fn main_content(
         .tooltip_text(t!("toggle_sidebar"))
         .active(true)
         .build();
-    
+
     // Connect the toggle button to the sidebar's collapsed state
     sidebar_toggle.connect_toggled(clone!(
         #[weak]
@@ -76,7 +76,7 @@ pub fn main_content(
             main_content_overlay_split_view.set_show_sidebar(toggle.is_active());
         }
     ));
-    
+
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
 
     let mut pci_rows = vec![];
@@ -100,9 +100,13 @@ pub fn main_content(
             dialog.present(Some(&window));
         }
     ));
-    showallprofiles_action.connect_activate(clone!(#[strong] all_profiles_button, move |_, _| {
-        all_profiles_button.emit_clicked();
-    }));
+    showallprofiles_action.connect_activate(clone!(
+        #[strong]
+        all_profiles_button,
+        move |_, _| {
+            all_profiles_button.emit_clicked();
+        }
+    ));
 
     theme_changed_thread(&theme_changed_action);
 
@@ -217,23 +221,22 @@ pub fn main_content(
         &window_breakpoint,
         all_profiles_button.clone(),
         sidebar_toggle.clone(),
-        &about_action
+        &about_action,
     )));
 
-    main_content_overlay_split_view
-        .set_sidebar(Some(&main_content_sidebar(&window_stack, &pci_rows, &usb_rows)));
+    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(
+        &window_stack,
+        &pci_rows,
+        &usb_rows,
+    )));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
         "collapsed",
         Some(&true.to_value()),
     );
-    
-    window_breakpoint.add_setter(
-        &sidebar_toggle,
-        "active",
-        Some(&false.to_value()),
-    );
+
+    window_breakpoint.add_setter(&sidebar_toggle, "active", Some(&false.to_value()));
 
     window.add_breakpoint(window_breakpoint);
 
@@ -471,11 +474,7 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
     }
 }
 
-fn custom_stack_selection_button(
-    name: String,
-    title: String,
-    icon: String,
-) -> gtk::ListBoxRow {
+fn custom_stack_selection_button(name: String, title: String, icon: String) -> gtk::ListBoxRow {
     // Create a box to hold the icon and label with proper spacing
     let button_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -485,103 +484,30 @@ fn custom_stack_selection_button(
         .margin_end(8)
         .spacing(8)
         .build();
-    
+
     // Add the icon
     let icon_widget = gtk::Image::builder()
         .icon_name(&icon)
         .pixel_size(16)
         .build();
-    
+
     // Add the label
     let label = gtk::Label::builder()
         .label(&title)
         .halign(gtk::Align::Start)
         .hexpand(true)
         .build();
-    
+
     // Add them to the box
     button_box.append(&icon_widget);
     button_box.append(&label);
-    
+
     // Create the button with the box as its child
     let listboxrow = gtk::ListBoxRow::builder()
         .child(&button_box)
         .tooltip_text(&title)
         .name(name)
         .build();
-    
+
     listboxrow
-}
-
-pub fn run_in_lock_script(
-    log_loop_sender: &async_channel::Sender<crate::ChannelMsg>,
-    script: &str,
-) {
-    use crate::ChannelMsg;
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-    use users::get_current_username;
-
-    let file_path = "/var/cache/cfhdb/script_lock.sh";
-    let file_fs_path = std::path::Path::new(file_path);
-    if file_fs_path.exists() {
-        std::fs::remove_file(file_fs_path).unwrap();
-    }
-    {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(file_path)
-            .expect(&(file_path.to_string() + "cannot be read"));
-        file.write_all(script.as_bytes())
-            .expect(&(file_path.to_string() + "cannot be written to"));
-        let mut perms = file
-            .metadata()
-            .expect(&(file_path.to_string() + "cannot be read"))
-            .permissions();
-        perms.set_mode(0o777);
-        std::fs::set_permissions(file_path, perms)
-            .expect(&(file_path.to_string() + "cannot be written to"));
-    }
-    let username = get_current_username().unwrap();
-    let final_cmd = if username == "root" {
-        duct::cmd!(file_path)
-    } else {
-        duct::cmd!("pkexec", file_path)
-    };
-
-    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
-        Ok(_) => {
-            log_loop_sender
-                .send_blocking(ChannelMsg::SuccessMsg)
-                .unwrap();
-        }
-        Err(_) => {
-            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
-        }
-    }
-}
-
-pub fn exec_duct_with_live_channel_stdout(
-    sender: &async_channel::Sender<crate::ChannelMsg>,
-    duct_expr: duct::Expression,
-) -> Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>> {
-    use crate::ChannelMsg;
-    use std::io::BufRead;
-
-    let (pipe_reader, pipe_writer) = os_pipe::pipe()?;
-    let child = duct_expr
-        .stderr_to_stdout()
-        .stdout_file(pipe_writer)
-        .start()?;
-    for line in std::io::BufReader::new(pipe_reader).lines() {
-        sender
-            .send_blocking(ChannelMsg::OutputLine(line?))
-            .expect("Channel needs to be opened.")
-    }
-
-    child.wait()?;
-
-    Ok(())
 }

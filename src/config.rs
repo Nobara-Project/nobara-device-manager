@@ -13,10 +13,6 @@ pub struct ProfileUrlConfig {
     usb_json_url: String,
 }
 
-pub fn distro_package_manager(opreation: &str, package_list: &str) -> String {
-    format!("apt-get --assume-yes {} {}", &opreation, package_list)
-}
-
 lazy_static::lazy_static! {
     pub static ref PCI_PROFILE_JSON_URL: String = get_profile_url_config().pci_json_url;
     pub static ref USB_PROFILE_JSON_URL: String = get_profile_url_config().usb_json_url;
