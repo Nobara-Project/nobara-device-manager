@@ -1,3 +1,9 @@
+pika-device-manager (0.1.2-101pika1) pika; urgency=medium
+
+  * Move to pikd
+
+ -- ferreo <harderthanfire@gmail.com>  Wed, 18 Jan 2023 21:48:14 +0000
+
 pika-device-manager (0.1.1-101pika1) pika; urgency=medium
 
   * Add Global Menu, Refine Sidebar and remove Ferreo's annoying change to it XD
