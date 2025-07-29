@@ -21,4 +21,5 @@ serde_json = "1.0"
 textwrap = "0.16.2"
 users = "0.11.0"
 circularprogressbar-rs = { git = "https://github.com/CosmicFusion/circularprogressbar-rs", version = "0.1.1" }
+pikd-pharser-rs = { git = "https://git.pika-os.com/general-packages/pikd-pharser-rs", version = "0.1.0" }
 

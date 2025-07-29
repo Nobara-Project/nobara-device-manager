@@ -1586,6 +1586,7 @@ dependencies = [
  "lazy_static",
  "libadwaita",
  "os_pipe",
+ "pikd-pharser-rs",
  "rayon",
  "regex",
  "reqwest",
@@ -1594,6 +1595,18 @@ dependencies = [
  "serde_json",
  "textwrap",
  "users",
+]
+
+[[package]]
+name = "pikd-pharser-rs"
+version = "0.1.0"
+source = "git+https://git.pika-os.com/general-packages/pikd-pharser-rs#311c0af2c2667630f9187b94b71d9eb15996126e"
+dependencies = [
+ "async-channel",
+ "chrono",
+ "duct",
+ "os_pipe",
+ "regex",
 ]
 
 [[package]]

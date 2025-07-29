@@ -27,7 +27,6 @@ pub enum ChannelMsg {
 // application crates
 mod build_ui;
 mod cfhdb;
-mod pikd;
 
 use crate::build_ui::build_ui;
 

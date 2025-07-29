@@ -1,7 +1,6 @@
 use crate::{
-    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle},
+    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text},
     cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile},
-    pikd::{get_current_font, run_addon_command, wrap_text, PikChannel},
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -11,6 +10,7 @@ use gtk::{
     Orientation::Vertical,
     ScrolledWindow, SelectionMode,
 };
+use pikd_pharser_rs::{init_pikd_with_duct, PikChannel};
 
 use libcfhdb::pci::CfhdbPciDevice;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
@@ -875,7 +875,7 @@ pub fn profile_modify(
                         Some(t) => match profile_content.packages {
                             Some(a) => {
                                 let package_list = a.join(" ");
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",
@@ -912,7 +912,7 @@ echo "INSTALL {PLIST}" | nc -U /var/run/pik.sock
                                 }
                             }
                             None => {
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",
@@ -948,7 +948,7 @@ set -e
                         None => match profile_content.packages {
                             Some(a) => {
                                 let package_list = a.join(" ");
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",
@@ -993,7 +993,7 @@ echo "INSTALL {PLIST}" | nc -U /var/run/pik.sock
                         Some(t) => match profile_content.packages {
                             Some(a) => {
                                 let package_list = a.join(" ");
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",
@@ -1029,7 +1029,7 @@ echo "REMOVE --purge {PLIST}" | nc -U /var/run/pik.sock
                                 }
                             }
                             None => {
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",
@@ -1065,7 +1065,7 @@ set -e
                         None => match profile_content.packages {
                             Some(a) => {
                                 let package_list = a.join(" ");
-                                let command = run_addon_command(
+                                let command = init_pikd_with_duct(
                                     duct::cmd!(
                                         "pkexec",
                                         "bash",

@@ -9,6 +9,36 @@ use crate::{
 };
 use adw::{glib::clone, prelude::*, *};
 
+pub fn wrap_text(text: &str, max_length: usize) -> String {
+    let mut result = String::new();
+    let mut current_line_length = 0;
+
+    for word in text.split_whitespace() {
+        let word_length = word.chars().count();
+
+        if current_line_length + word_length > max_length {
+            // Don't add newline if this is the first word in line
+            if current_line_length > 0 {
+                result.push('\n');
+                current_line_length = 0;
+            }
+        } else if current_line_length > 0 {
+            result.push(' ');
+            current_line_length += 1;
+        }
+
+        result.push_str(word);
+        current_line_length += word_length;
+    }
+
+    result
+}
+
+pub fn get_current_font() -> String {
+    let settings = gtk::Settings::default().unwrap();
+    settings.gtk_font_name().unwrap().to_string()
+}
+
 pub fn build_ui(app: &adw::Application) {
     // setup glib
     gtk::glib::set_prgname(Some(t!("application_name").to_string()));
