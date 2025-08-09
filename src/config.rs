@@ -11,11 +11,15 @@ pub const APP_GIT: &str = "https://git.pika-os.com/custom-gui-packages/pika-devi
 pub struct ProfileUrlConfig {
     pci_json_url: String,
     usb_json_url: String,
+    dmi_json_url: String,
+    bt_json_url: String,
 }
 
 lazy_static::lazy_static! {
     pub static ref PCI_PROFILE_JSON_URL: String = get_profile_url_config().pci_json_url;
     pub static ref USB_PROFILE_JSON_URL: String = get_profile_url_config().usb_json_url;
+    pub static ref DMI_PROFILE_JSON_URL: String = get_profile_url_config().dmi_json_url;
+    pub static ref BT_PROFILE_JSON_URL: String = get_profile_url_config().bt_json_url;
 }
 
 fn get_profile_url_config() -> ProfileUrlConfig {

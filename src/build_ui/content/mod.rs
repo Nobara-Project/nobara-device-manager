@@ -7,10 +7,13 @@ use gtk::glib::{self, clone};
 use gtk::*;
 use gtk::{Align, StackTransitionType, ToggleButton};
 
+use crate::build_ui::content::dmi::create_dmi_class;
+use crate::cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile};
 use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
 
 mod all_profile_dialog;
+mod dmi;
 mod internet_check;
 mod main_content_content;
 mod main_content_sidebar;
@@ -28,8 +31,10 @@ pub fn main_content(
     window: &adw::ApplicationWindow,
     hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
     hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
+    dmi_info: PreCheckedDmiInfo,
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
+    dmi_profiles: Vec<Arc<PreCheckedDmiProfile>>,
     about_action: &gtk::gio::SimpleAction,
     showallprofiles_action: &gtk::gio::SimpleAction,
 ) -> adw::OverlaySplitView {
@@ -109,6 +114,46 @@ pub fn main_content(
     ));
 
     theme_changed_thread(&theme_changed_action);
+
+    // DMI placeholder
+
+    // Create a placeholder page with a loading spinner
+    let placeholder = create_placeholder_page(&t!("dmi_row_title"));
+
+    window_stack.add_titled(&placeholder, Some("dmi"), &t!("dmi_row_title"));
+
+    // Store the devices for lazy loading
+    let window_clone = window.clone();
+    let theme_changed_action_clone = theme_changed_action.clone();
+    let update_device_status_action_clone = update_device_status_action.clone();
+
+    // Connect to the "map" signal to load content when page becomes visible
+    placeholder.connect_map(move |placeholder| {
+        // Check if this page has already been loaded
+        if let Some(child) = placeholder.first_child() {
+            if child.widget_name() == "content_loaded" {
+                return;
+            }
+        }
+
+        // Create the actual content
+        let content = create_dmi_class(
+            &window_clone,
+            &dmi_info,
+            &t!("dmi_row_title").to_string(),
+            &theme_changed_action_clone,
+            &update_device_status_action_clone,
+        );
+        content.set_widget_name("content_loaded");
+
+        // Replace the placeholder with the actual content
+        while let Some(child) = placeholder.first_child() {
+            placeholder.remove(&child);
+        }
+        placeholder.append(&content);
+    });
+
+    let dmi_row = custom_stack_selection_button(String::from("dmi"), t!("dmi_row_title").to_string(), String::from(""));
 
     // Create placeholder pages for each class
     for (class, devices) in hashmap_pci {
@@ -228,6 +273,7 @@ pub fn main_content(
         &window_stack,
         &pci_rows,
         &usb_rows,
+        &dmi_row,
     )));
 
     window_breakpoint.add_setter(

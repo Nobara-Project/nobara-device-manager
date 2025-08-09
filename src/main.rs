@@ -18,8 +18,10 @@ pub enum ChannelMsg {
     SuccessMsgDeviceFetch(
         Vec<(String, Vec<PreCheckedPciDevice>)>,
         Vec<(String, Vec<PreCheckedUsbDevice>)>,
+        PreCheckedDmiInfo,
         Vec<Arc<PreCheckedPciProfile>>,
         Vec<Arc<PreCheckedUsbProfile>>,
+        Vec<Arc<PreCheckedDmiProfile>>,
     ),
     FailMsg,
 }
@@ -28,7 +30,7 @@ pub enum ChannelMsg {
 mod build_ui;
 mod cfhdb;
 
-use crate::build_ui::build_ui;
+use crate::{build_ui::build_ui, cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile}};
 
 // Init translations for current crate.
 #[macro_use]

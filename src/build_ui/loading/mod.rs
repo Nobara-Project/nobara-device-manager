@@ -4,6 +4,7 @@ use std::time::Instant;
 use crate::{
     build_ui::content::main_content,
     cfhdb::{
+        dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiInfo, PreCheckedDmiProfile},
         pci::{
             get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile,
         },
@@ -20,6 +21,17 @@ use gtk::{
     Orientation,
 };
 use rayon::prelude::*;
+
+const PERM_FIX_PROG: &str = r###"
+#! /bin/bash
+
+USER=$(whoami)
+
+chown $USER:$USER -R /var/cache/cfhdb || pkexec chown $USER:$USER -R /var/cache/cfhdb 
+chmod 777 -R /var/cache/cfhdb || pkexec chmod 777 -R /var/cache/cfhdb
+rm -rf /var/cache/cfhdb/check_cmd.sh || pkexec rm -rf /var/cache/cfhdb/check_cmd.sh
+
+"###;
 
 pub fn loading_content(
     window: &ApplicationWindow,
@@ -96,15 +108,19 @@ pub fn loading_content(
                     ChannelMsg::SuccessMsgDeviceFetch(
                         hashmap_pci,
                         hashmap_usb,
+                        dmi_info,
                         pci_profiles,
                         usb_profiles,
+                        dmi_profiles,
                     ) => {
                         window.set_content(Some(&main_content(
                             &window,
                             hashmap_pci,
                             hashmap_usb,
+                            dmi_info,
                             pci_profiles,
                             usb_profiles,
+                            dmi_profiles,
                             &about_action,
                             &showallprofiles_action,
                         )));
@@ -132,6 +148,9 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
     std::thread::spawn(move || {
         let total_start = Instant::now();
 
+        // fix perms
+        duct::cmd!("bash", "-c", PERM_FIX_PROG).run().unwrap();
+
         // Step 1: Download profiles
         status_sender
             .send_blocking(ChannelMsg::OutputLine(format!(
@@ -140,6 +159,12 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                 t!("downloading_profiles")
             )))
             .expect("Channel closed");
+
+        // Get DMI profiles
+        let dmi_start = Instant::now();
+        let dmi_profiles_result = get_dmi_profiles_from_url(&status_sender);
+        let dmi_download_time = dmi_start.elapsed();
+        println!("[PERF] DMI profiles download took: {:?}", dmi_download_time);
 
         // Get PCI profiles
         let pci_start = Instant::now();
@@ -152,6 +177,33 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
         let usb_profiles_result = get_usb_profiles_from_url(&status_sender);
         let usb_download_time = usb_start.elapsed();
         println!("[PERF] USB profiles download took: {:?}", usb_download_time);
+
+        // Process DMI profiles
+        let dmi_process_start = Instant::now();
+        let dmi_profiles: Vec<Arc<PreCheckedDmiProfile>> = match dmi_profiles_result {
+            Ok(t) => t
+                .into_par_iter()
+                .map(|x| {
+                    let profile = PreCheckedDmiProfile::new(x);
+                    profile.update_installed();
+                    Arc::new(profile)
+                })
+                .collect(),
+            Err(e) => {
+                status_sender
+                    .send_blocking(ChannelMsg::OutputLine(e.to_string()))
+                    .expect("Channel closed");
+                status_sender
+                    .send_blocking(ChannelMsg::FailMsg)
+                    .expect("Channel closed");
+                panic!();
+            }
+        };
+        let dmi_process_time = dmi_process_start.elapsed();
+        println!(
+            "[PERF] DMI profiles processing took: {:?}",
+            dmi_process_time
+        );
 
         // Process PCI profiles
         let pci_process_start = Instant::now();
@@ -215,6 +267,12 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                 t!("processing_devices")
             )))
             .expect("Channel closed");
+
+        // Process DMI Info
+        let dmi_info_start = Instant::now();
+        let dmi_info = get_dmi_info(&dmi_profiles);
+        let dmi_info_time = dmi_info_start.elapsed();
+        println!("[PERF] DMI Info processing took: {:?}", dmi_info_time);
 
         // Process PCI devices
         let pci_devices_start = Instant::now();
@@ -294,8 +352,10 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                     .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(
                         pci_vec,
                         usb_vec,
+                        dmi_info,
                         pci_profiles,
                         usb_profiles,
+                        dmi_profiles,
                     ))
                     .expect("Channel closed");
             }

@@ -2,7 +2,7 @@ use crate::{
     build_ui::{
         color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text,
     },
-    cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile},
+    cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile},
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -14,26 +14,24 @@ use gtk::{
 };
 use pikd_pharser_rs::{init_pikd_with_duct, PikChannel};
 
-use libcfhdb::pci::CfhdbPciDevice;
+use libcfhdb::dmi::CfhdbDmiInfo;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
 
 use super::error_dialog;
 
-pub fn create_pci_class(
+pub fn create_dmi_class(
     window: &ApplicationWindow,
-    devices: &Vec<PreCheckedPciDevice>,
+    info: &PreCheckedDmiInfo,
     class: &str,
     theme_changed_action: &gio::SimpleAction,
-    update_device_status_action: &gio::SimpleAction,
+    update_info_status_action: &gio::SimpleAction,
 ) -> ScrolledWindow {
     // Update all profiles' installation status before creating the UI
-    for device in devices {
-        for profile in &device.profiles {
-            profile.update_installed();
-        }
+    for profile in &info.profiles {
+        profile.update_installed();
     }
 
-    let devices_list_row = gtk::ListBox::builder()
+    let info_list_row = gtk::ListBox::builder()
         .margin_top(20)
         .margin_bottom(20)
         .margin_start(20)
@@ -42,24 +40,22 @@ pub fn create_pci_class(
         .vexpand(true)
         .hexpand(true)
         .build();
-    devices_list_row.add_css_class("boxed-list");
+    info_list_row.add_css_class("boxed-list");
     //
-    let devices_navigation_page_toolbar = adw::ToolbarView::builder()
-        .content(&devices_list_row)
-        .build();
-    devices_navigation_page_toolbar.add_top_bar(
+    let info_navigation_page_toolbar = adw::ToolbarView::builder().content(&info_list_row).build();
+    info_navigation_page_toolbar.add_top_bar(
         &adw::HeaderBar::builder()
             .show_end_title_buttons(false)
             .show_start_title_buttons(false)
             .build(),
     );
-    let devices_navigation_page = adw::NavigationPage::builder()
+    let info_navigation_page = adw::NavigationPage::builder()
         .title(class)
-        .child(&devices_navigation_page_toolbar)
+        .child(&info_navigation_page_toolbar)
         .build();
     //
     let navigation_view = adw::NavigationView::builder().build();
-    navigation_view.add(&devices_navigation_page);
+    navigation_view.add(&info_navigation_page);
     let scroll = gtk::ScrolledWindow::builder()
         .max_content_width(650)
         .min_content_width(300)
@@ -67,63 +63,62 @@ pub fn create_pci_class(
         .child(&navigation_view)
         .build();
     //
-    for device in devices {
-        let device_content = &device.device;
-        let device_status_indicator = ColoredCircle::new();
-        device_status_indicator.set_width_request(15);
-        device_status_indicator.set_height_request(15);
-        let device_title = format!(
-            "{} - {}",
-            &device_content.vendor_name, &device_content.device_name
-        );
-        let device_navigation_page_toolbar = adw::ToolbarView::builder()
-            .content(&pci_device_page(
-                &window,
-                &device,
-                &theme_changed_action,
-                &update_device_status_action,
-                &device_status_indicator,
-            ))
-            .build();
-        device_navigation_page_toolbar.add_top_bar(
-            &adw::HeaderBar::builder()
-                .show_end_title_buttons(false)
-                .show_start_title_buttons(false)
-                .build(),
-        );
-        let device_navigation_page = adw::NavigationPage::builder()
-            .title(&device_title)
-            .child(&device_navigation_page_toolbar)
-            .build();
-        navigation_view.add(&device_navigation_page);
-        let action_row = adw::ActionRow::builder()
-            .title(&device_title)
-            .subtitle(&device_content.sysfs_busid)
-            .activatable(true)
-            .build();
-        action_row.connect_activated(clone!(
-            #[weak]
-            navigation_view,
-            #[weak]
-            device_navigation_page,
-            move |_| {
-                navigation_view.push(&device_navigation_page);
-            }
-        ));
-        action_row.add_suffix(&device_status_indicator);
-        devices_list_row.append(&action_row);
-    }
+    let info_content = &info.info;
+    let info_status_indicator = ColoredCircle::new();
+    info_status_indicator.set_width_request(15);
+    info_status_indicator.set_height_request(15);
+    let info_title = format!(
+        "{} - {}",
+        &info_content.board_vendor, &info_content.product_name
+    );
+    let info_navigation_page_toolbar = adw::ToolbarView::builder()
+        .content(&dmi_info_page(
+            &window,
+            &info,
+            &theme_changed_action,
+            &update_info_status_action,
+            &info_status_indicator,
+        ))
+        .build();
+    info_navigation_page_toolbar.add_top_bar(
+        &adw::HeaderBar::builder()
+            .show_end_title_buttons(false)
+            .show_start_title_buttons(false)
+            .build(),
+    );
+    let info_navigation_page = adw::NavigationPage::builder()
+        .title(&info_title)
+        .child(&info_navigation_page_toolbar)
+        .build();
+    navigation_view.add(&info_navigation_page);
+    let action_row = adw::ActionRow::builder()
+        .title(&info_title)
+        .subtitle(&info_content.board_asset_tag)
+        .activatable(true)
+        .build();
+    action_row.connect_activated(clone!(
+        #[weak]
+        navigation_view,
+        #[weak]
+        info_navigation_page,
+        move |_| {
+            navigation_view.push(&info_navigation_page);
+        }
+    ));
+    action_row.add_suffix(&info_status_indicator);
+    info_list_row.append(&action_row);
+
     scroll
 }
 
-fn pci_device_page(
+fn dmi_info_page(
     window: &ApplicationWindow,
-    device: &PreCheckedPciDevice,
+    info: &PreCheckedDmiInfo,
     theme_changed_action: &gio::SimpleAction,
-    update_device_status_action: &gio::SimpleAction,
-    device_status_indicator: &ColoredCircle,
+    update_info_status_action: &gio::SimpleAction,
+    info_status_indicator: &ColoredCircle,
 ) -> gtk::Box {
-    let device_content = &device.device;
+    let info_content = &info.info;
     let content_box = gtk::Box::builder()
         .hexpand(true)
         .vexpand(true)
@@ -140,25 +135,13 @@ fn pci_device_page(
         .build();
 
     //
-    let device_controls_box = gtk::Box::builder()
-        .orientation(Orientation::Horizontal)
-        .valign(Align::Start)
-        .halign(Align::Center)
-        .margin_start(10)
-        .margin_end(10)
-        .margin_bottom(20)
-        .margin_top(20)
-        .build();
-    device_controls_box.add_css_class("linked");
-
-    //
     let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let color_badges_size_group1 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
     //
     let mut color_badges_vec = vec![];
     let started_color_badge = ColorBadge::new();
-    started_color_badge.set_label0(textwrap::fill(&t!("device_started"), 10));
+    started_color_badge.set_label0(textwrap::fill(&t!("info_started"), 10));
     started_color_badge.set_group_size0(&color_badges_size_group0);
     started_color_badge.set_group_size1(&color_badges_size_group1);
     started_color_badge.set_theme_changed_action(theme_changed_action);
@@ -166,7 +149,7 @@ fn pci_device_page(
     color_badges_vec.push(&started_color_badge);
 
     let enabled_color_badge = ColorBadge::new();
-    enabled_color_badge.set_label0(textwrap::fill(&t!("device_enabled"), 10));
+    enabled_color_badge.set_label0(textwrap::fill(&t!("info_enabled"), 10));
     enabled_color_badge.set_group_size0(&color_badges_size_group0);
     enabled_color_badge.set_group_size1(&color_badges_size_group1);
     enabled_color_badge.set_theme_changed_action(theme_changed_action);
@@ -174,7 +157,7 @@ fn pci_device_page(
     color_badges_vec.push(&enabled_color_badge);
 
     let driver_color_badge = ColorBadge::new();
-    driver_color_badge.set_label0(textwrap::fill(&t!("device_driver"), 10));
+    driver_color_badge.set_label0(textwrap::fill(&t!("info_driver"), 10));
     driver_color_badge.set_css_style("background-accent-bg");
     driver_color_badge.set_group_size0(&color_badges_size_group0);
     driver_color_badge.set_group_size1(&color_badges_size_group1);
@@ -183,7 +166,7 @@ fn pci_device_page(
     color_badges_vec.push(&driver_color_badge);
 
     let sysfs_busid_color_badge = ColorBadge::new();
-    sysfs_busid_color_badge.set_label0(textwrap::fill(&t!("device_sysfs_busid"), 10));
+    sysfs_busid_color_badge.set_label0(textwrap::fill(&t!("info_sysfs_busid"), 10));
     sysfs_busid_color_badge.set_css_style("background-accent-bg");
     sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
     sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
@@ -192,7 +175,7 @@ fn pci_device_page(
     color_badges_vec.push(&sysfs_busid_color_badge);
 
     let vendor_id_color_badge = ColorBadge::new();
-    vendor_id_color_badge.set_label0(textwrap::fill(&t!("device_vendor_id"), 10));
+    vendor_id_color_badge.set_label0(textwrap::fill(&t!("info_vendor_id"), 10));
     vendor_id_color_badge.set_css_style("background-accent-bg");
     vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
     vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
@@ -200,14 +183,14 @@ fn pci_device_page(
 
     color_badges_vec.push(&vendor_id_color_badge);
 
-    let device_id_color_badge = ColorBadge::new();
-    device_id_color_badge.set_label0(textwrap::fill(&t!("device_device_id"), 10));
-    device_id_color_badge.set_css_style("background-accent-bg");
-    device_id_color_badge.set_group_size0(&color_badges_size_group0);
-    device_id_color_badge.set_group_size1(&color_badges_size_group1);
-    device_id_color_badge.set_theme_changed_action(theme_changed_action);
+    let info_id_color_badge = ColorBadge::new();
+    info_id_color_badge.set_label0(textwrap::fill(&t!("info_info_id"), 10));
+    info_id_color_badge.set_css_style("background-accent-bg");
+    info_id_color_badge.set_group_size0(&color_badges_size_group0);
+    info_id_color_badge.set_group_size1(&color_badges_size_group1);
+    info_id_color_badge.set_theme_changed_action(theme_changed_action);
 
-    color_badges_vec.push(&device_id_color_badge);
+    color_badges_vec.push(&info_id_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
     let row_count = (color_badges_vec.len() / 2) as i32;
@@ -246,7 +229,7 @@ fn pci_device_page(
     }
     //
 
-    let control_button_start_device_button = gtk::Button::builder()
+    let control_button_start_info_button = gtk::Button::builder()
         .child(
             &gtk::Image::builder()
                 .icon_name("media-playback-start-symbolic")
@@ -255,9 +238,9 @@ fn pci_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text(t!("device_control_start"))
+        .tooltip_text(t!("info_control_start"))
         .build();
-    let control_button_stop_device_button = gtk::Button::builder()
+    let control_button_stop_info_button = gtk::Button::builder()
         .child(
             &gtk::Image::builder()
                 .icon_name("media-playback-stop-symbolic")
@@ -266,9 +249,9 @@ fn pci_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text(t!("device_control_stop"))
+        .tooltip_text(t!("info_control_stop"))
         .build();
-    let control_button_enable_device_button = gtk::Button::builder()
+    let control_button_enable_info_button = gtk::Button::builder()
         .child(
             &gtk::Image::builder()
                 .icon_name("emblem-ok-symbolic")
@@ -277,9 +260,9 @@ fn pci_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text(t!("device_control_enable"))
+        .tooltip_text(t!("info_control_enable"))
         .build();
-    let control_button_disable_device_button = gtk::Button::builder()
+    let control_button_disable_info_button = gtk::Button::builder()
         .child(
             &gtk::Image::builder()
                 .icon_name("edit-clear-all-symbolic")
@@ -288,7 +271,7 @@ fn pci_device_page(
         )
         .width_request(48)
         .height_request(48)
-        .tooltip_text(t!("device_control_disable"))
+        .tooltip_text(t!("info_control_disable"))
         .build();
 
     let available_profiles_list_row = adw::PreferencesGroup::builder()
@@ -305,68 +288,8 @@ fn pci_device_page(
 
     let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
-    let mut profiles = device.profiles.clone();
+    let mut profiles = info.profiles.clone();
     profiles.sort_by_key(|x| x.profile().priority);
-
-    control_button_start_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.start_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_start_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_enable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.enable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_stop_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.stop_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_disable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.disable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string()),
-            }
-        }
-    ));
 
     let mut normal_profiles = vec![];
     let mut veiled_profiles = vec![];
@@ -449,7 +372,7 @@ fn pci_device_page(
             #[strong]
             window,
             #[strong]
-            update_device_status_action,
+            update_info_status_action,
             #[strong]
             profile,
             #[strong]
@@ -459,7 +382,7 @@ fn pci_device_page(
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &update_device_status_action,
+                    &update_info_status_action,
                     &profile,
                     &profiles_rc,
                     "install",
@@ -471,7 +394,7 @@ fn pci_device_page(
             #[strong]
             window,
             #[strong]
-            update_device_status_action,
+            update_info_status_action,
             #[strong]
             profile,
             #[strong]
@@ -481,7 +404,7 @@ fn pci_device_page(
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &update_device_status_action,
+                    &update_info_status_action,
                     &profile,
                     &profiles_rc,
                     "remove",
@@ -496,7 +419,7 @@ fn pci_device_page(
             normal_profiles.push(profile_expander_row);
         }
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_info_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -508,89 +431,9 @@ fn pci_device_page(
         }));
     }
 
-    update_device_status_action.connect_activate(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        device_status_indicator,
-        #[strong]
-        control_button_start_device_button,
-        #[strong]
-        control_button_stop_device_button,
-        #[strong]
-        control_button_enable_device_button,
-        #[strong]
-        control_button_disable_device_button,
-        move |_, _| {
-            let updated_device =
-                CfhdbPciDevice::get_device_from_busid(&device_content.sysfs_busid).unwrap();
-            let (started, enabled) = (
-                updated_device.started.unwrap_or_default(),
-                updated_device.enabled,
-            );
-            let (color, tooltip) = match (enabled, started) {
-                (true, true) => (RGBA::GREEN, &t!("device_status_active_enabled")),
-                (false, true) => (RGBA::BLUE, &t!("device_status_active_disabled")),
-                (true, false) => (
-                    RGBA::new(60.0, 255.0, 0.0, 1.0),
-                    &t!("device_status_inactive_enabled"),
-                ),
-                (false, false) => (RGBA::RED, &t!("device_status_inactive_disabled")),
-            };
-            device_status_indicator.set_color(color);
-            device_status_indicator.set_tooltip_text(Some(tooltip));
-
-            control_button_start_device_button.set_sensitive(!started);
-            control_button_stop_device_button.set_sensitive(started);
-
-            control_button_enable_device_button.set_sensitive(!enabled);
-            control_button_disable_device_button.set_sensitive(enabled);
-
-            let device_started_i18n = if started {
-                &t!("status_yes")
-            } else {
-                &t!("status_no")
-            };
-            let device_enabled_i18n = if enabled {
-                &t!("status_yes")
-            } else {
-                &t!("status_no")
-            };
-            started_color_badge.set_label1(textwrap::fill(device_started_i18n, 10));
-            started_color_badge.set_css_style(if started {
-                "background-accent-bg"
-            } else {
-                "background-red-bg"
-            });
-            enabled_color_badge.set_label1(textwrap::fill(device_enabled_i18n, 10));
-            enabled_color_badge.set_css_style(if enabled {
-                "background-accent-bg"
-            } else {
-                "background-red-bg"
-            });
-            driver_color_badge
-                .set_label1(textwrap::fill(device_content.kernel_driver.as_str(), 10));
-            sysfs_busid_color_badge
-                .set_label1(textwrap::fill(&device_content.sysfs_busid.as_str(), 10));
-            vendor_id_color_badge
-                .set_label1(textwrap::fill(&device_content.vendor_id.as_str(), 10));
-            device_id_color_badge
-                .set_label1(textwrap::fill(&device_content.device_id.as_str(), 10));
-        }
-    ));
-
-    update_device_status_action.activate(None);
-
-    device_controls_box.append(&control_button_start_device_button);
-
-    device_controls_box.append(&control_button_stop_device_button);
-
-    device_controls_box.append(&control_button_enable_device_button);
-
-    device_controls_box.append(&control_button_disable_device_button);
+    update_info_status_action.activate(None);
 
     content_box.append(&color_badges_grid);
-    content_box.append(&device_controls_box);
     for widget in normal_profiles {
         available_profiles_list_row.add(&widget);
     }
@@ -626,9 +469,9 @@ fn pci_device_page(
 
 pub fn profile_modify(
     window: ApplicationWindow,
-    update_device_status_action: &gio::SimpleAction,
-    profile: &Arc<PreCheckedPciProfile>,
-    all_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>,
+    update_info_status_action: &gio::SimpleAction,
+    profile: &Arc<PreCheckedDmiProfile>,
+    all_profiles: &Rc<Vec<Arc<PreCheckedDmiProfile>>>,
     opreation: &str,
     theme_changed_action: &gio::SimpleAction,
 ) {
@@ -772,7 +615,7 @@ pub fn profile_modify(
         #[strong]
         pikd_log_image,
         #[strong]
-        update_device_status_action,
+        update_info_status_action,
         #[strong]
         string_opreation,
         async move {
@@ -803,7 +646,7 @@ pub fn profile_modify(
                             pikd_dialog.set_response_enabled("pikd_dialog_ok", true);
                             pikd_dialog.set_response_enabled("pikd_dialog_open_log_file", true);
                         }
-                        update_device_status_action.activate(None);
+                        update_info_status_action.activate(None);
                     }
                     PikChannel::DownloadStats(stats) => {
                         pikd_dialog_progress_bar.set_fraction(stats.total_percent / 100.0);
@@ -1128,7 +971,7 @@ echo "REMOVE --purge {PLIST}" | nc -U /var/run/pik.sock
         #[strong]
         all_profiles,
         #[strong]
-        update_device_status_action,
+        update_info_status_action,
         move |choice: glib::GString| {
             match choice.as_str() {
                 "pikd_dialog_reboot" => {
@@ -1142,7 +985,7 @@ echo "REMOVE --purge {PLIST}" | nc -U /var/run/pik.sock
                     for a_profile in all_profiles.iter() {
                         a_profile.update_installed();
                     }
-                    update_device_status_action.activate(None);
+                    update_info_status_action.activate(None);
                 }
             }
         }

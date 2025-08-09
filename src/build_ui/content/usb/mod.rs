@@ -1,5 +1,8 @@
 use crate::{
-    build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text}, cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile}
+    build_ui::{
+        color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text,
+    },
+    cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile},
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -626,7 +629,7 @@ pub fn profile_modify(
     profile: &Arc<PreCheckedUsbProfile>,
     all_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>,
     opreation: &str,
-    theme_changed_action: &gio::SimpleAction
+    theme_changed_action: &gio::SimpleAction,
 ) {
     let profile_content = profile.profile();
 
@@ -641,8 +644,9 @@ pub fn profile_modify(
         chrono::offset::Local::now().format("%Y-%m-%d_%H:%M")
     );
 
-
-    let pikd_dialog_child_box = gtk::Box::builder().orientation(Orientation::Vertical).build();
+    let pikd_dialog_child_box = gtk::Box::builder()
+        .orientation(Orientation::Vertical)
+        .build();
 
     let pikd_dialog_progress_bar = circularprogressbar_rs::CircularProgressBar::new();
     pikd_dialog_progress_bar.set_line_width(10.0);
@@ -710,16 +714,24 @@ pub fn profile_modify(
         .extra_child(&pikd_dialog_child_box)
         .heading(match string_opreation.as_str() {
             "install" => t!("profile_install_dialog_heading"),
-            _ => t!("profile_remove_dialog_heading")
+            _ => t!("profile_remove_dialog_heading"),
         })
         .width_request(600)
         .height_request(600)
         .build();
 
-    pikd_dialog.add_response("pikd_dialog_ok", &t!("profile_install_dialog_ok_label").to_string());
-    pikd_dialog.add_response("pikd_dialog_reboot", &t!("profile_install_dialog_reboot_label").to_string());
+    pikd_dialog.add_response(
+        "pikd_dialog_ok",
+        &t!("profile_install_dialog_ok_label").to_string(),
+    );
+    pikd_dialog.add_response(
+        "pikd_dialog_reboot",
+        &t!("profile_install_dialog_reboot_label").to_string(),
+    );
 
-    let pikd_dialog_child_box_done = gtk::Box::builder().orientation(Orientation::Vertical).build();
+    let pikd_dialog_child_box_done = gtk::Box::builder()
+        .orientation(Orientation::Vertical)
+        .build();
 
     let pikd_log_image = gtk::Image::builder()
         .pixel_size(128)
@@ -770,21 +782,23 @@ pub fn profile_modify(
                             pikd_dialog_child_box.set_visible(false);
                             pikd_log_image.set_icon_name(Some("face-cool-symbolic"));
                             pikd_dialog.set_extra_child(Some(&pikd_dialog_child_box_done));
-                            pikd_dialog
-                                .set_title(&match string_opreation.as_str() {
-                                    "install" => t!("profile_install_dialog_body_successful").to_string(),
-                                    _ => t!("profile_install_dialog_body_failed").to_string()
-                                });
+                            pikd_dialog.set_title(&match string_opreation.as_str() {
+                                "install" => {
+                                    t!("profile_install_dialog_body_successful").to_string()
+                                }
+                                _ => t!("profile_install_dialog_body_failed").to_string(),
+                            });
                             pikd_dialog.set_response_enabled("pikd_dialog_ok", true);
                         } else {
                             pikd_dialog_child_box.set_visible(false);
                             pikd_log_image.set_icon_name(Some("dialog-error-symbolic"));
                             pikd_dialog.set_extra_child(Some(&pikd_dialog_child_box_done));
-                            pikd_dialog
-                                .set_title(&match string_opreation.as_str() {
-                                    "install" => t!("profile_remove_dialog_body_successful").to_string(),
-                                    _ => t!("profile_remove_dialog_body_failed").to_string(),
-                                });
+                            pikd_dialog.set_title(&match string_opreation.as_str() {
+                                "install" => {
+                                    t!("profile_remove_dialog_body_successful").to_string()
+                                }
+                                _ => t!("profile_remove_dialog_body_failed").to_string(),
+                            });
                             pikd_dialog.set_response_enabled("pikd_dialog_ok", true);
                             pikd_dialog.set_response_enabled("pikd_dialog_open_log_file", true);
                         }
@@ -849,10 +863,11 @@ pub fn profile_modify(
         #[strong]
         log_file_path,
         move |_| {
-        let _ = Command::new("xdg-open")
-            .arg(log_file_path.to_owned())
-            .spawn();
-    }));
+            let _ = Command::new("xdg-open")
+                .arg(log_file_path.to_owned())
+                .spawn();
+        }
+    ));
 
     thread::spawn(clone!(
         #[strong]
