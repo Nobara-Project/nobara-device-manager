@@ -7,7 +7,9 @@ use gtk::glib::{self, clone};
 use gtk::*;
 use gtk::{Align, StackTransitionType, ToggleButton};
 
+use crate::build_ui::content::bt::create_bt_class;
 use crate::build_ui::content::dmi::create_dmi_class;
+use crate::cfhdb::bt::{PreCheckedBtDevice, PreCheckedBtProfile};
 use crate::cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile};
 use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
@@ -19,6 +21,7 @@ mod main_content_content;
 mod main_content_sidebar;
 mod pci;
 mod usb;
+mod bt;
 
 use all_profile_dialog::all_profile_dialog;
 use internet_check::internet_check_loop;
@@ -32,9 +35,11 @@ pub fn main_content(
     hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
     hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
     dmi_info: PreCheckedDmiInfo,
+    hashmap_bt: Vec<(String, Vec<PreCheckedBtDevice>)>,
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
     dmi_profiles: Vec<Arc<PreCheckedDmiProfile>>,
+    bt_profiles: Vec<Arc<PreCheckedBtProfile>>,
     about_action: &gtk::gio::SimpleAction,
     showallprofiles_action: &gtk::gio::SimpleAction,
 ) -> adw::OverlaySplitView {
@@ -86,10 +91,12 @@ pub fn main_content(
 
     let mut pci_rows = vec![];
     let mut usb_rows = vec![];
+    let mut bt_rows = vec![];
 
     let dmi_profiles_rc = Rc::new(dmi_profiles);
     let pci_profiles_rc = Rc::new(pci_profiles);
     let usb_profiles_rc = Rc::new(usb_profiles);
+    let bt_profiles_rc = Rc::new(bt_profiles);
     let dialog = all_profile_dialog(
         window.clone(),
         &update_device_status_action,
@@ -97,6 +104,7 @@ pub fn main_content(
         &dmi_profiles_rc,
         &pci_profiles_rc,
         &usb_profiles_rc,
+        &bt_profiles_rc
     );
     all_profiles_button.connect_clicked(clone!(
         #[strong]
@@ -155,7 +163,11 @@ pub fn main_content(
         placeholder.append(&content);
     });
 
-    let dmi_row = custom_stack_selection_button(String::from("dmi"), t!("dmi_row_title").to_string(), String::from(""));
+    let dmi_row = custom_stack_selection_button(
+        String::from("dmi"),
+        t!("dmi_row_title").to_string(),
+        String::from(""),
+    );
 
     // Create placeholder pages for each class
     for (class, devices) in hashmap_pci {
@@ -260,6 +272,60 @@ pub fn main_content(
         ));
     }
 
+    //
+
+    // Create placeholder pages for each class
+    for (class, devices) in hashmap_bt {
+        let class = format!("bt_class_name_{}", class);
+        let class_i18n = t!(class).to_string();
+
+        // Create a placeholder page with a loading spinner
+        let placeholder = create_placeholder_page(&class_i18n);
+
+        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        // Store the devices for lazy loading
+        let devices_clone = devices.clone();
+        let window_clone = window.clone();
+        let theme_changed_action_clone = theme_changed_action.clone();
+        let update_device_status_action_clone = update_device_status_action.clone();
+        let class_i18n_clone = class_i18n.clone();
+
+        // Connect to the "map" signal to load content when page becomes visible
+        placeholder.connect_map(move |placeholder| {
+            // Check if this page has already been loaded
+            if let Some(child) = placeholder.first_child() {
+                if child.widget_name() == "content_loaded" {
+                    return;
+                }
+            }
+
+            // Create the actual content
+            let content = create_bt_class(
+                &window_clone,
+                &devices_clone,
+                &class_i18n_clone,
+                &theme_changed_action_clone,
+                &update_device_status_action_clone,
+            );
+            content.set_widget_name("content_loaded");
+
+            // Replace the placeholder with the actual content
+            while let Some(child) = placeholder.first_child() {
+                placeholder.remove(&child);
+            }
+            placeholder.append(&content);
+        });
+
+        bt_rows.push(custom_stack_selection_button(
+            class.clone(),
+            class_i18n,
+            get_icon_for_class(&class)
+                .unwrap_or("dialog-question-symbolic")
+                .into(),
+        ));
+    }
+
     main_content_overlay_split_view.set_content(Some(&main_content_content(
         &window,
         &window_banner,
@@ -276,6 +342,7 @@ pub fn main_content(
         &pci_rows,
         &usb_rows,
         &dmi_row,
+        &bt_rows
     )));
 
     window_breakpoint.add_setter(

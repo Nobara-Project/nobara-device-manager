@@ -6,6 +6,7 @@ pub fn main_content_sidebar(
     pci_rows: &Vec<ListBoxRow>,
     usb_rows: &Vec<ListBoxRow>,
     dmi_row: &ListBoxRow,
+    bt_rows: &Vec<ListBoxRow>,
 ) -> adw::ToolbarView {
     let main_content_sidebar_box = gtk::Box::builder()
         .orientation(Orientation::Vertical)
@@ -51,6 +52,12 @@ pub fn main_content_sidebar(
         .build();
     usb_rows_listbox.add_css_class("navigation-sidebar");
 
+
+    let bt_rows_listbox = ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .build();
+    bt_rows_listbox.add_css_class("navigation-sidebar");
+
     // DMI Devices Section
     let dmi_label = gtk::Label::builder()
         .label(&t!("dmi_devices").to_string())
@@ -73,10 +80,13 @@ pub fn main_content_sidebar(
         #[strong]
         usb_rows_listbox,
         #[strong]
+        bt_rows_listbox,
+        #[strong]
         stack,
         move |_, row| {
             pci_rows_listbox.select_row(None::<&ListBoxRow>);
             usb_rows_listbox.select_row(None::<&ListBoxRow>);
+            bt_rows_listbox.select_row(None::<&ListBoxRow>);
             stack.set_visible_child_name(&row.widget_name());
         }
     ));
@@ -118,10 +128,13 @@ pub fn main_content_sidebar(
         #[strong]
         dmi_rows_listbox,
         #[strong]
+        bt_rows_listbox,
+        #[strong]
         stack,
         move |_, row| {
             usb_rows_listbox.select_row(None::<&ListBoxRow>);
             dmi_rows_listbox.select_row(None::<&ListBoxRow>);
+            bt_rows_listbox.select_row(None::<&ListBoxRow>);
             stack.set_visible_child_name(&row.widget_name());
         }
     ));
@@ -157,10 +170,55 @@ pub fn main_content_sidebar(
         #[strong]
         dmi_rows_listbox,
         #[strong]
+        bt_rows_listbox,
+        #[strong]
         stack,
         move |_, row| {
             pci_rows_listbox.select_row(None::<&ListBoxRow>);
             dmi_rows_listbox.select_row(None::<&ListBoxRow>);
+            bt_rows_listbox.select_row(None::<&ListBoxRow>);
+            stack.set_visible_child_name(&row.widget_name());
+        }
+    ));
+
+    // Separator between sections
+    let separator = gtk::Separator::builder()
+        .orientation(Orientation::Horizontal)
+        .margin_top(12)
+        .margin_bottom(12)
+        .build();
+    main_content_sidebar_box.append(&separator);
+    
+    // BT Devices Section
+    let bt_label = gtk::Label::builder()
+        .label(&t!("bt_devices").to_string())
+        .halign(gtk::Align::Start)
+        .margin_start(16)
+        .margin_top(8)
+        .margin_bottom(4)
+        .build();
+    bt_label.add_css_class("heading");
+
+    main_content_sidebar_box.append(&bt_label);
+    main_content_sidebar_box.append(&bt_rows_listbox);
+
+    for row in bt_rows {
+        bt_rows_listbox.append(row);
+    }
+
+    bt_rows_listbox.connect_row_activated(clone!(
+        #[strong]
+        pci_rows_listbox,
+        #[strong]
+        usb_rows_listbox,
+        #[strong]
+        dmi_rows_listbox,
+        #[strong]
+        stack,
+        move |_, row| {
+            pci_rows_listbox.select_row(None::<&ListBoxRow>);
+            dmi_rows_listbox.select_row(None::<&ListBoxRow>);
+            usb_rows_listbox.select_row(None::<&ListBoxRow>);
             stack.set_visible_child_name(&row.widget_name());
         }
     ));

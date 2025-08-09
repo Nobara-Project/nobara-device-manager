@@ -2,18 +2,13 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::{
-    build_ui::content::main_content,
-    cfhdb::{
-        dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiProfile},
-        pci::{
+    build_ui::content::main_content, cfhdb::{
+        bt::{get_bt_devices, get_bt_profiles_from_url, PreCheckedBtDevice, PreCheckedBtProfile}, dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiProfile}, pci::{
             get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile,
-        },
-        usb::{
+        }, usb::{
             get_usb_devices, get_usb_profiles_from_url, PreCheckedUsbDevice, PreCheckedUsbProfile,
-        },
-    },
-    config::APP_ICON,
-    ChannelMsg,
+        }
+    }, config::APP_ICON, ChannelMsg
 };
 use adw::{prelude::*, *};
 use gtk::{
@@ -21,6 +16,40 @@ use gtk::{
     Orientation,
 };
 use rayon::prelude::*;
+use rayon;
+
+macro_rules! rayon_join {
+    ($a1:expr, $a2:expr) => {{
+        rayon::join($a1, $a2)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr) => {{
+        let ((r1, r2), r3) = rayon::join(|| rayon_join!($a1, $a2), $a3);
+        (r1, r2, r3)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr, $a4:expr) => {{
+        let ((r1, r2), (r3, r4)) = rayon::join(|| join!($a1, $a2), || join!($a3, $a4));
+        (r1, r2, r3, r4)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr) => {{
+        let ((r1, r2, r3), (r4, r5)) = rayon::join(|| join!($a1, $a2, $a3), || join!($a4, $a5));
+        (r1, r2, r3, r4, r5)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr) => {{
+        let ((r1, r2, r3), (r4, r5, r6)) =
+            rayon::join(|| join!($a1, $a2, $a3), || join!($a4, $a5, $a6));
+        (r1, r2, r3, r4, r5, r6)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr) => {{
+        let ((r1, r2, r3, r4), (r5, r6, r7)) =
+            rayon::join(|| join!($a1, $a2, $a3, $a4), || join!($a5, $a6, $a7));
+        (r1, r2, r3, r4, r5, r6, r7)
+    }};
+    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr, $a8:expr) => {{
+        let ((r1, r2, r3, r4), (r5, r6, r7, r8)) =
+            rayon::join(|| join!($a1, $a2, $a3, $a4), || join!($a5, $a6, $a7, $a8));
+        (r1, r2, r3, r4, r5, r6, r7, r8)
+    }};
+}
 
 const PERM_FIX_PROG: &str = r###"
 #! /bin/bash
@@ -109,18 +138,22 @@ pub fn loading_content(
                         hashmap_pci,
                         hashmap_usb,
                         dmi_info,
+                        hashmap_bt,
                         pci_profiles,
                         usb_profiles,
                         dmi_profiles,
+                        bt_profiles,
                     ) => {
                         window.set_content(Some(&main_content(
                             &window,
                             hashmap_pci,
                             hashmap_usb,
                             dmi_info,
+                            hashmap_bt,
                             pci_profiles,
                             usb_profiles,
                             dmi_profiles,
+                            bt_profiles,
                             &about_action,
                             &showallprofiles_action,
                         )));
@@ -177,6 +210,12 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
         let usb_profiles_result = get_usb_profiles_from_url(&status_sender);
         let usb_download_time = usb_start.elapsed();
         println!("[PERF] USB profiles download took: {:?}", usb_download_time);
+
+        // Get BT profiles
+        let bt_start = Instant::now();
+        let bt_profiles_result = get_bt_profiles_from_url(&status_sender);
+        let bt_download_time = bt_start.elapsed();
+        println!("[PERF] BT profiles download took: {:?}", bt_download_time);
 
         // Process DMI profiles
         let dmi_process_start = Instant::now();
@@ -259,6 +298,33 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
             usb_process_time
         );
 
+        // Process BT profiles
+        let bt_process_start = Instant::now();
+        let bt_profiles: Vec<Arc<PreCheckedBtProfile>> = match bt_profiles_result {
+            Ok(t) => t
+                .into_par_iter()
+                .map(|x| {
+                    let profile = PreCheckedBtProfile::new(x);
+                    profile.update_installed();
+                    Arc::new(profile)
+                })
+                .collect(),
+            Err(e) => {
+                status_sender
+                    .send_blocking(ChannelMsg::OutputLine(e.to_string()))
+                    .expect("Channel closed");
+                status_sender
+                    .send_blocking(ChannelMsg::FailMsg)
+                    .expect("Channel closed");
+                panic!();
+            }
+        };
+        let bt_process_time = bt_process_start.elapsed();
+        println!(
+            "[PERF] BT profiles processing took: {:?}",
+            bt_process_time
+        );
+
         // Step 2: Process devices
         status_sender
             .send_blocking(ChannelMsg::OutputLine(format!(
@@ -286,8 +352,14 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
         let usb_devices_time = usb_devices_start.elapsed();
         println!("[PERF] USB devices processing took: {:?}", usb_devices_time);
 
-        match (hashmap_pci_result, hashmap_usb_result) {
-            (Some(hashmap_pci), Some(hashmap_usb)) => {
+        // Process BT devices
+        let bt_devices_start = Instant::now();
+        let hashmap_bt_result = get_bt_devices(bt_profiles.as_slice());
+        let bt_devices_time = bt_devices_start.elapsed();
+        println!("[PERF] BT devices processing took: {:?}", bt_devices_time);
+
+        match (hashmap_pci_result, hashmap_usb_result, hashmap_bt_result) {
+            (Some(hashmap_pci), Some(hashmap_usb), Some(hashmap_bt)) => {
                 status_sender
                     .send_blocking(ChannelMsg::OutputLine(format!(
                         "[{}] {}",
@@ -302,6 +374,8 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                     hashmap_pci.into_iter().collect();
                 let mut usb_vec: Vec<(String, Vec<PreCheckedUsbDevice>)> =
                     hashmap_usb.into_iter().collect();
+                let mut bt_vec: Vec<(String, Vec<PreCheckedBtDevice>)> =
+                    hashmap_bt.into_iter().collect();
                 let convert_time = convert_start.elapsed();
                 println!(
                     "[PERF] Converting hashmaps to vectors took: {:?}",
@@ -310,8 +384,7 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
 
                 // Sort the vectors in parallel
                 let sort_start = Instant::now();
-                rayon::join(
-                    || {
+                rayon_join!(|| {
                         pci_vec.par_sort_by(|a, b| {
                             let a_class = t!(format!("pci_class_name_{}", a.0))
                                 .to_string()
@@ -333,7 +406,17 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                             b_class.cmp(&a_class)
                         });
                     },
-                );
+                    || {
+                        bt_vec.par_sort_by(|a, b| {
+                            let a_class = t!(format!("bt_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("bt_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        });
+                    });
                 let sort_time = sort_start.elapsed();
                 println!("[PERF] Sorting vectors took: {:?}", sort_time);
 
@@ -353,13 +436,15 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                         pci_vec,
                         usb_vec,
                         dmi_info,
+                        bt_vec,
                         pci_profiles,
                         usb_profiles,
                         dmi_profiles,
+                        bt_profiles
                     ))
                     .expect("Channel closed");
             }
-            (_, _) => {
+            (_, _, _) => {
                 status_sender
                     .send_blocking(ChannelMsg::FailMsg)
                     .expect("Channel closed");
