@@ -87,12 +87,14 @@ pub fn main_content(
     let mut pci_rows = vec![];
     let mut usb_rows = vec![];
 
+    let dmi_profiles_rc = Rc::new(dmi_profiles);
     let pci_profiles_rc = Rc::new(pci_profiles);
     let usb_profiles_rc = Rc::new(usb_profiles);
     let dialog = all_profile_dialog(
         window.clone(),
         &update_device_status_action,
         &theme_changed_action,
+        &dmi_profiles_rc,
         &pci_profiles_rc,
         &usb_profiles_rc,
     );

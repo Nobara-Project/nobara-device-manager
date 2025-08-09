@@ -1,12 +1,11 @@
 use crate::{
     build_ui::{
-        color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text,
+        color_badge::ColorBadge, get_current_font, wrap_text,
     },
     cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile},
 };
 use adw::{prelude::*, *};
 use gtk::{
-    gdk::RGBA,
     glib::{clone, MainContext},
     Align, Orientation,
     Orientation::Vertical,
@@ -14,10 +13,7 @@ use gtk::{
 };
 use pikd_pharser_rs::{init_pikd_with_duct, PikChannel};
 
-use libcfhdb::dmi::CfhdbDmiInfo;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
-
-use super::error_dialog;
 
 pub fn create_dmi_class(
     window: &ApplicationWindow,
@@ -64,9 +60,6 @@ pub fn create_dmi_class(
         .build();
     //
     let info_content = &info.info;
-    let info_status_indicator = ColoredCircle::new();
-    info_status_indicator.set_width_request(15);
-    info_status_indicator.set_height_request(15);
     let info_title = format!(
         "{} - {}",
         &info_content.board_vendor, &info_content.product_name
@@ -77,7 +70,6 @@ pub fn create_dmi_class(
             &info,
             &theme_changed_action,
             &update_info_status_action,
-            &info_status_indicator,
         ))
         .build();
     info_navigation_page_toolbar.add_top_bar(
@@ -105,7 +97,6 @@ pub fn create_dmi_class(
             navigation_view.push(&info_navigation_page);
         }
     ));
-    action_row.add_suffix(&info_status_indicator);
     info_list_row.append(&action_row);
 
     scroll
@@ -116,7 +107,6 @@ fn dmi_info_page(
     info: &PreCheckedDmiInfo,
     theme_changed_action: &gio::SimpleAction,
     update_info_status_action: &gio::SimpleAction,
-    info_status_indicator: &ColoredCircle,
 ) -> gtk::Box {
     let info_content = &info.info;
     let content_box = gtk::Box::builder()
@@ -138,141 +128,187 @@ fn dmi_info_page(
     let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let color_badges_size_group1 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
-    //
     let mut color_badges_vec = vec![];
-    let started_color_badge = ColorBadge::new();
-    started_color_badge.set_label0(textwrap::fill(&t!("info_started"), 10));
-    started_color_badge.set_group_size0(&color_badges_size_group0);
-    started_color_badge.set_group_size1(&color_badges_size_group1);
-    started_color_badge.set_theme_changed_action(theme_changed_action);
 
-    color_badges_vec.push(&started_color_badge);
+    //
+    let bios_date_color_badge = ColorBadge::new();
+    bios_date_color_badge.set_label0(textwrap::fill(&t!("info_bios_date"), 10));
+    bios_date_color_badge.set_label1(textwrap::fill(&info_content.bios_date, 10));
+    bios_date_color_badge.set_css_style("background-accent-bg");
+    bios_date_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_date_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_date_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let enabled_color_badge = ColorBadge::new();
-    enabled_color_badge.set_label0(textwrap::fill(&t!("info_enabled"), 10));
-    enabled_color_badge.set_group_size0(&color_badges_size_group0);
-    enabled_color_badge.set_group_size1(&color_badges_size_group1);
-    enabled_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_date_color_badge);
+    //
 
-    color_badges_vec.push(&enabled_color_badge);
+    let bios_release_color_badge = ColorBadge::new();
+    bios_release_color_badge.set_label0(textwrap::fill(&t!("info_bios_release"), 10));
+    bios_release_color_badge.set_label1(textwrap::fill(&info_content.bios_release, 10));
+    bios_release_color_badge.set_css_style("background-accent-bg");
+    bios_release_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_release_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_release_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let driver_color_badge = ColorBadge::new();
-    driver_color_badge.set_label0(textwrap::fill(&t!("info_driver"), 10));
-    driver_color_badge.set_css_style("background-accent-bg");
-    driver_color_badge.set_group_size0(&color_badges_size_group0);
-    driver_color_badge.set_group_size1(&color_badges_size_group1);
-    driver_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_release_color_badge);
+    //
 
-    color_badges_vec.push(&driver_color_badge);
+    let bios_vendor_color_badge = ColorBadge::new();
+    bios_vendor_color_badge.set_label0(textwrap::fill(&t!("info_bios_vendor"), 10));
+    bios_vendor_color_badge.set_label1(textwrap::fill(&info_content.bios_vendor, 10));
+    bios_vendor_color_badge.set_css_style("background-accent-bg");
+    bios_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_vendor_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let sysfs_busid_color_badge = ColorBadge::new();
-    sysfs_busid_color_badge.set_label0(textwrap::fill(&t!("info_sysfs_busid"), 10));
-    sysfs_busid_color_badge.set_css_style("background-accent-bg");
-    sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
-    sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
-    sysfs_busid_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_vendor_color_badge);
+    //
 
-    color_badges_vec.push(&sysfs_busid_color_badge);
+    let bios_version_color_badge = ColorBadge::new();
+    bios_version_color_badge.set_label0(textwrap::fill(&t!("info_bios_version"), 10));
+    bios_version_color_badge.set_label1(textwrap::fill(&info_content.bios_version, 10));
+    bios_version_color_badge.set_css_style("background-accent-bg");
+    bios_version_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_version_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_version_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let vendor_id_color_badge = ColorBadge::new();
-    vendor_id_color_badge.set_label0(textwrap::fill(&t!("info_vendor_id"), 10));
-    vendor_id_color_badge.set_css_style("background-accent-bg");
-    vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
-    vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
-    vendor_id_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_version_color_badge);
+    //
 
-    color_badges_vec.push(&vendor_id_color_badge);
+    let board_asset_tag_color_badge = ColorBadge::new();
+    board_asset_tag_color_badge.set_label0(textwrap::fill(&t!("info_board_asset_tag"), 10));
+    board_asset_tag_color_badge.set_label1(textwrap::fill(&info_content.board_asset_tag, 10));
+    board_asset_tag_color_badge.set_css_style("background-accent-bg");
+    board_asset_tag_color_badge.set_group_size0(&color_badges_size_group0);
+    board_asset_tag_color_badge.set_group_size1(&color_badges_size_group1);
+    board_asset_tag_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let info_id_color_badge = ColorBadge::new();
-    info_id_color_badge.set_label0(textwrap::fill(&t!("info_info_id"), 10));
-    info_id_color_badge.set_css_style("background-accent-bg");
-    info_id_color_badge.set_group_size0(&color_badges_size_group0);
-    info_id_color_badge.set_group_size1(&color_badges_size_group1);
-    info_id_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&board_asset_tag_color_badge);
+    //
 
-    color_badges_vec.push(&info_id_color_badge);
+    let board_name_color_badge = ColorBadge::new();
+    board_name_color_badge.set_label0(textwrap::fill(&t!("info_board_name"), 10));
+    board_name_color_badge.set_label1(textwrap::fill(&info_content.board_name, 10));
+    board_name_color_badge.set_css_style("background-accent-bg");
+    board_name_color_badge.set_group_size0(&color_badges_size_group0);
+    board_name_color_badge.set_group_size1(&color_badges_size_group1);
+    board_name_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_name_color_badge);
+    //
+
+    let board_vendor_color_badge = ColorBadge::new();
+    board_vendor_color_badge.set_label0(textwrap::fill(&t!("info_board_vendor"), 10));
+    board_vendor_color_badge.set_label1(textwrap::fill(&info_content.board_vendor, 10));
+    board_vendor_color_badge.set_css_style("background-accent-bg");
+    board_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    board_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    board_vendor_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_vendor_color_badge);
+
+    //
+
+    let board_version_color_badge = ColorBadge::new();
+    board_version_color_badge.set_label0(textwrap::fill(&t!("info_board_version"), 10));
+    board_version_color_badge.set_label1(textwrap::fill(&info_content.bios_version, 10));
+    board_version_color_badge.set_css_style("background-accent-bg");
+    board_version_color_badge.set_group_size0(&color_badges_size_group0);
+    board_version_color_badge.set_group_size1(&color_badges_size_group1);
+    board_version_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_version_color_badge);
+    //
+
+    let product_family_color_badge = ColorBadge::new();
+    product_family_color_badge.set_label0(textwrap::fill(&t!("info_product_family"), 10));
+    product_family_color_badge.set_label1(textwrap::fill(&info_content.product_family, 10));
+    product_family_color_badge.set_css_style("background-accent-bg");
+    product_family_color_badge.set_group_size0(&color_badges_size_group0);
+    product_family_color_badge.set_group_size1(&color_badges_size_group1);
+    product_family_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_family_color_badge);
+    //
+
+    let product_name_color_badge = ColorBadge::new();
+    product_name_color_badge.set_label0(textwrap::fill(&t!("info_product_name"), 10));
+    product_name_color_badge.set_label1(textwrap::fill(&info_content.product_name, 10));
+    product_name_color_badge.set_css_style("background-accent-bg");
+    product_name_color_badge.set_group_size0(&color_badges_size_group0);
+    product_name_color_badge.set_group_size1(&color_badges_size_group1);
+    product_name_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_name_color_badge);
+    //
+
+    let product_sku_color_badge = ColorBadge::new();
+    product_sku_color_badge.set_label0(textwrap::fill(&t!("info_product_sku"), 10));
+    product_sku_color_badge.set_label1(textwrap::fill(&info_content.product_sku, 10));
+    product_sku_color_badge.set_css_style("background-accent-bg");
+    product_sku_color_badge.set_group_size0(&color_badges_size_group0);
+    product_sku_color_badge.set_group_size1(&color_badges_size_group1);
+    product_sku_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_sku_color_badge);
+    //
+
+    let product_version_color_badge = ColorBadge::new();
+    product_version_color_badge.set_label0(textwrap::fill(&t!("info_product_version"), 10));
+    product_version_color_badge.set_label1(textwrap::fill(&info_content.product_version, 10));
+    product_version_color_badge.set_css_style("background-accent-bg");
+    product_version_color_badge.set_group_size0(&color_badges_size_group0);
+    product_version_color_badge.set_group_size1(&color_badges_size_group1);
+    product_version_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_version_color_badge);
+    //
+
+    let sys_vendor_color_badge = ColorBadge::new();
+    sys_vendor_color_badge.set_label0(textwrap::fill(&t!("info_sys_vendor"), 10));
+    sys_vendor_color_badge.set_label1(textwrap::fill(&info_content.sys_vendor, 10));
+    sys_vendor_color_badge.set_css_style("background-accent-bg");
+    sys_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    sys_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    sys_vendor_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&sys_vendor_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
-    let row_count = (color_badges_vec.len() / 2) as i32;
+    let mut next_position = gtk::PositionType::Bottom;
+    let max_row_count = 4;
 
     for badge in color_badges_vec {
         if last_widget.0.is_none() {
             color_badges_grid.attach(badge, 0, 0, 1, 1);
-        } else if last_widget.1 > row_count {
+        } else if last_widget.1 < max_row_count {
             color_badges_grid.attach_next_to(
                 badge,
                 Some(last_widget.0.unwrap()),
-                gtk::PositionType::Top,
+                next_position,
                 1,
                 1,
-            )
-        } else if last_widget.1 == row_count {
+            );
+            last_widget.1 += 1;
+        } else if last_widget.1 == max_row_count {
             color_badges_grid.attach_next_to(
                 badge,
                 Some(last_widget.0.unwrap()),
-                gtk::PositionType::Left,
+                gtk::PositionType::Right,
                 1,
                 1,
-            )
-        } else {
-            color_badges_grid.attach_next_to(
-                badge,
-                Some(last_widget.0.unwrap()),
-                gtk::PositionType::Bottom,
-                1,
-                1,
-            )
+            );
+            last_widget.1 = 0;
+            if next_position == gtk::PositionType::Top {
+                next_position = gtk::PositionType::Bottom
+            } else {
+                next_position = gtk::PositionType::Top
+            }
         }
 
         last_widget.0 = Some(badge);
-        last_widget.1 += 1;
     }
     //
-
-    let control_button_start_info_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-start-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("info_control_start"))
-        .build();
-    let control_button_stop_info_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-stop-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("info_control_stop"))
-        .build();
-    let control_button_enable_info_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("emblem-ok-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("info_control_enable"))
-        .build();
-    let control_button_disable_info_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("edit-clear-all-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("info_control_disable"))
-        .build();
 
     let available_profiles_list_row = adw::PreferencesGroup::builder()
         .margin_top(20)

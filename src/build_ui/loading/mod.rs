@@ -4,7 +4,7 @@ use std::time::Instant;
 use crate::{
     build_ui::content::main_content,
     cfhdb::{
-        dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiInfo, PreCheckedDmiProfile},
+        dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiProfile},
         pci::{
             get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile,
         },
