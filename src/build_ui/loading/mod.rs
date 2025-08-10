@@ -2,21 +2,27 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::{
-    build_ui::content::main_content, cfhdb::{
-        bt::{get_bt_devices, get_bt_profiles_from_url, PreCheckedBtDevice, PreCheckedBtProfile}, dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiProfile}, pci::{
+    build_ui::content::main_content,
+    cfhdb::{
+        bt::{get_bt_devices, get_bt_profiles_from_url, PreCheckedBtDevice, PreCheckedBtProfile},
+        dmi::{get_dmi_info, get_dmi_profiles_from_url, PreCheckedDmiProfile},
+        pci::{
             get_pci_devices, get_pci_profiles_from_url, PreCheckedPciDevice, PreCheckedPciProfile,
-        }, usb::{
+        },
+        usb::{
             get_usb_devices, get_usb_profiles_from_url, PreCheckedUsbDevice, PreCheckedUsbProfile,
-        }
-    }, config::APP_ICON, ChannelMsg
+        },
+    },
+    config::APP_ICON,
+    ChannelMsg,
 };
 use adw::{prelude::*, *};
 use gtk::{
     glib::{clone, MainContext},
     Orientation,
 };
-use rayon::prelude::*;
 use rayon;
+use rayon::prelude::*;
 
 macro_rules! rayon_join {
     ($a1:expr, $a2:expr) => {{
@@ -320,10 +326,7 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
             }
         };
         let bt_process_time = bt_process_start.elapsed();
-        println!(
-            "[PERF] BT profiles processing took: {:?}",
-            bt_process_time
-        );
+        println!("[PERF] BT profiles processing took: {:?}", bt_process_time);
 
         // Step 2: Process devices
         status_sender
@@ -384,7 +387,8 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
 
                 // Sort the vectors in parallel
                 let sort_start = Instant::now();
-                rayon_join!(|| {
+                rayon_join!(
+                    || {
                         pci_vec.par_sort_by(|a, b| {
                             let a_class = t!(format!("pci_class_name_{}", a.0))
                                 .to_string()
@@ -416,7 +420,8 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                                 .to_lowercase();
                             b_class.cmp(&a_class)
                         });
-                    });
+                    }
+                );
                 let sort_time = sort_start.elapsed();
                 println!("[PERF] Sorting vectors took: {:?}", sort_time);
 
@@ -440,7 +445,7 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                         pci_profiles,
                         usb_profiles,
                         dmi_profiles,
-                        bt_profiles
+                        bt_profiles,
                     ))
                     .expect("Channel closed");
             }

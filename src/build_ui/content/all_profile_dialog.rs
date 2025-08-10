@@ -11,7 +11,7 @@ use crate::{
     cfhdb::{pci::PreCheckedPciProfile, usb::PreCheckedUsbProfile},
 };
 
-use super::{dmi, pci, usb, bt};
+use super::{bt, dmi, pci, usb};
 
 pub fn all_profile_dialog(
     window: adw::ApplicationWindow,

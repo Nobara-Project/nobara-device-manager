@@ -52,7 +52,6 @@ pub fn main_content_sidebar(
         .build();
     usb_rows_listbox.add_css_class("navigation-sidebar");
 
-
     let bt_rows_listbox = ListBox::builder()
         .selection_mode(gtk::SelectionMode::Single)
         .build();
@@ -188,7 +187,7 @@ pub fn main_content_sidebar(
         .margin_bottom(12)
         .build();
     main_content_sidebar_box.append(&separator);
-    
+
     // BT Devices Section
     let bt_label = gtk::Label::builder()
         .label(&t!("bt_devices").to_string())

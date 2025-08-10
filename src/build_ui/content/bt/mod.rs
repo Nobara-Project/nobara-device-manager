@@ -72,10 +72,7 @@ pub fn create_bt_class(
         let device_status_indicator = ColoredCircle::new();
         device_status_indicator.set_width_request(15);
         device_status_indicator.set_height_request(15);
-        let device_title = format!(
-            "{} - {}",
-            &device_content.alias, &device_content.name
-        );
+        let device_title = format!("{} - {}", &device_content.alias, &device_content.name);
         let device_navigation_page_toolbar = adw::ToolbarView::builder()
             .content(&bt_device_page(
                 &window,
@@ -99,8 +96,8 @@ pub fn create_bt_class(
         let action_row = adw::ActionRow::builder()
             .title(&device_title)
             .subtitle(&format!(
-            "{} - {}",
-            &device_content.adapter, &device_content.address
+                "{} - {}",
+                &device_content.adapter, &device_content.address
             ))
             .activatable(true)
             .build();
@@ -402,7 +399,11 @@ fn bt_device_page(
         move |_| {
             match device_content.disconnect_device() {
                 Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_disconnect_error"), &e.to_string()),
+                Err(e) => error_dialog(
+                    window.clone(),
+                    &t!("device_disconnect_error"),
+                    &e.to_string(),
+                ),
             }
         }
     ));
@@ -633,7 +634,7 @@ fn bt_device_page(
                 updated_device.paired,
                 updated_device.connected,
                 updated_device.trusted,
-                updated_device.blocked
+                updated_device.blocked,
             );
             let (color, tooltip) = match (paired, connected) {
                 (true, true) => (RGBA::GREEN, &t!("device_status_active_connected")),
@@ -650,14 +651,12 @@ fn bt_device_page(
             control_button_pair_device_button.set_sensitive(!paired);
             control_button_disconnect_device_button.set_sensitive(connected);
             control_button_connect_device_button.set_sensitive(!connected);
-            
+
             control_button_trust_device_button.set_sensitive(!trusted);
             control_button_untrust_device_button.set_sensitive(trusted);
 
             control_button_block_device_button.set_sensitive(!blocked);
             control_button_unblock_device_button.set_sensitive(blocked);
-
-
 
             let device_paired_i18n = if paired {
                 &t!("status_yes")
@@ -703,14 +702,19 @@ fn bt_device_page(
             } else {
                 "background-red-bg"
             });
-            address_color_badge
-                .set_label1(textwrap::fill(&device_content.address.as_str(), 10));
-            vendor_id_color_badge
-                .set_label1(textwrap::fill(&device_content.modalias_vendor_id.as_str(), 10));
-            device_id_color_badge
-                .set_label1(textwrap::fill(&device_content.modalias_device_id.as_str(), 10));
-            product_id_color_badge
-                .set_label1(textwrap::fill(&device_content.modalias_product_id.as_str(), 10));
+            address_color_badge.set_label1(textwrap::fill(&device_content.address.as_str(), 10));
+            vendor_id_color_badge.set_label1(textwrap::fill(
+                &device_content.modalias_vendor_id.as_str(),
+                10,
+            ));
+            device_id_color_badge.set_label1(textwrap::fill(
+                &device_content.modalias_device_id.as_str(),
+                10,
+            ));
+            product_id_color_badge.set_label1(textwrap::fill(
+                &device_content.modalias_product_id.as_str(),
+                10,
+            ));
         }
     ));
 
@@ -723,7 +727,7 @@ fn bt_device_page(
     device_controls_box.append(&control_button_connect_device_button);
 
     device_controls_box.append(&control_button_trust_device_button);
-    
+
     device_controls_box.append(&control_button_untrust_device_button);
 
     device_controls_box.append(&control_button_block_device_button);

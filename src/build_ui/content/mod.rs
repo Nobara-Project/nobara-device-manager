@@ -15,13 +15,13 @@ use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
 
 mod all_profile_dialog;
+mod bt;
 mod dmi;
 mod internet_check;
 mod main_content_content;
 mod main_content_sidebar;
 mod pci;
 mod usb;
-mod bt;
 
 use all_profile_dialog::all_profile_dialog;
 use internet_check::internet_check_loop;
@@ -104,7 +104,7 @@ pub fn main_content(
         &dmi_profiles_rc,
         &pci_profiles_rc,
         &usb_profiles_rc,
-        &bt_profiles_rc
+        &bt_profiles_rc,
     );
     all_profiles_button.connect_clicked(clone!(
         #[strong]
@@ -342,7 +342,7 @@ pub fn main_content(
         &pci_rows,
         &usb_rows,
         &dmi_row,
-        &bt_rows
+        &bt_rows,
     )));
 
     window_breakpoint.add_setter(
@@ -584,6 +584,126 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         "usb_class_name_EF" => Some("dialog-question-symbolic"),
         "usb_class_name_FE" => Some("dialog-question-symbolic"),
         "usb_class_name_FF" => Some("dialog-question-symbolic"),
+        // bt classes
+        "bt_class_name_260"
+        | "bt_class_name_131072"
+        | "bt_class_name_131332"
+        | "bt_class_name_393476"
+        | "bt_class_name_1057028"
+        | "bt_class_name_1179908"
+        | "bt_class_name_3154180"
+        | "bt_class_name_3670276"
+        | "bt_class_name_3801348"
+        | "bt_class_name_3932420"
+        | "bt_class_name_4063492"
+        | "bt_class_name_8257796"
+        | "bt_class_name_16711940" => Some("Desktop workstations"),
+        "bt_class_name_268"
+        | "bt_class_name_131340"
+        | "bt_class_name_393484"
+        | "bt_class_name_1057036"
+        | "bt_class_name_1179916"
+        | "bt_class_name_1573132"
+        | "bt_class_name_1704204"
+        | "bt_class_name_1835276"
+        | "bt_class_name_1835278"
+        | "bt_class_name_2752780"
+        | "bt_class_name_3014924"
+        | "bt_class_name_3154188"
+        | "bt_class_name_3539212"
+        | "bt_class_name_3670284"
+        | "bt_class_name_3801356"
+        | "bt_class_name_3932428"
+        | "bt_class_name_4063500"
+        | "bt_class_name_7209228"
+        | "bt_class_name_786700"
+        | "bt_class_name_786703"
+        | "bt_class_name_7995660"
+        | "bt_class_name_8257804"
+        | "bt_class_name_1048844"
+        | "bt_class_name_16711948" => Some("Laptops"),
+        "bt_class_name_278"
+        | "bt_class_name_1048852"
+        | "bt_class_name_1179924"
+        | "bt_class_name_1704212"
+        | "bt_class_name_10092820" => Some("Palm-sized PCs/PDA"),
+        "bt_class_name_131344"
+        | "bt_class_name_655632"
+        | "bt_class_name_1704208"
+        | "bt_class_name_2752784"
+        | "bt_class_name_13762832" => Some("Handheld PCs/PDA"),
+        "bt_class_name_516"
+        | "bt_class_name_1049092"
+        | "bt_class_name_1573380"
+        | "bt_class_name_2097668"
+        | "bt_class_name_3146244"
+        | "bt_class_name_4194820"
+        | "bt_class_name_4203012"
+        | "bt_class_name_4850180"
+        | "bt_class_name_5243396"
+        | "bt_class_name_5374468"
+        | "bt_class_name_5382660"
+        | "bt_class_name_5767684"
+        | "bt_class_name_5898756"
+        | "bt_class_name_5906948"
+        | "bt_class_name_6160900"
+        | "bt_class_name_7471620" => Some("Cellular devices"),
+        "bt_class_name_520"
+        | "bt_class_name_1049096"
+        | "bt_class_name_524808"
+        | "bt_class_name_5374472"
+        | "bt_class_name_5898760" => Some("Cordless devices"),
+        "bt_class_name_1032"
+        | "bt_class_name_2098184"
+        | "bt_class_name_2360328"
+        | "bt_class_name_2622472"
+        | "bt_class_name_3146760"
+        | "bt_class_name_3408904"
+        | "bt_class_name_3671048"
+        | "bt_class_name_7472136"
+        | "bt_class_name_7603208"
+        | "bt_class_name_7734280"
+        | "bt_class_name_15991812" => Some("Hands-free devices"),
+        "bt_class_name_1052" | "bt_class_name_656412" | "bt_class_name_6947868" => {
+            Some("Portable audio devices")
+        }
+        "bt_class_name_1060" => Some("Set-top boxes"),
+        "bt_class_name_1084" | "bt_class_name_525372" => Some("Video displays"),
+        "bt_class_name_525848" => Some("Displays"),
+        "bt_class_name_1288" | "bt_class_name_1412" => Some("Joysticks"),
+        "bt_class_name_1344" | "bt_class_name_9536" => Some("Keyboards"),
+        "bt_class_name_1796" | "bt_class_name_2361092" => Some("Wrist watches"),
+        "bt_class_name_2312" => Some("Thermometers"),
+        "bt_class_name_9484" => Some("Remote controls"),
+        "bt_class_name_9600" => Some("Pointing devices"),
+        "bt_class_name_9620" => Some("Digitizer tablets"),
+        "bt_class_name_66060"
+        | "bt_class_name_66816"
+        | "bt_class_name_5243404"
+        | "bt_class_name_5767692"
+        | "bt_class_name_5898764"
+        | "bt_class_name_6423052"
+        | "bt_class_name_7340556"
+        | "bt_class_name_7471628"
+        | "bt_class_name_7864844"
+        | "bt_class_name_7995916" => Some("Smartphones"),
+        "bt_class_name_263744" => Some("Scanners"),
+        "bt_class_name_263808" | "bt_class_name_1312384" => Some("Printers"),
+        "bt_class_name_5374476" => Some("Palm-sized PCs/PDA"),
+        "bt_class_name_2098180"
+        | "bt_class_name_2360324"
+        | "bt_class_name_2884612"
+        | "bt_class_name_3408900"
+        | "bt_class_name_7341060"
+        | "bt_class_name_7480324"
+        | "bt_class_name_11625476"
+        | "bt_class_name_11863044"
+        | "bt_class_name_11887620"
+        | "bt_class_name_16131076" => Some("Wearable headset devices"),
+        "bt_class_name_2360340" => Some("Loudspeakers"),
+        "bt_class_name_2228508" => Some("Tablets"),
+        "bt_class_name_4063496" => Some("Server-class computers"),
+        "bt_class_name_4194832" => Some("Wired modems or voice gateways"),
         //
         _ => None,
     }

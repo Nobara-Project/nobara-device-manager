@@ -34,7 +34,10 @@ mod cfhdb;
 
 use crate::{
     build_ui::build_ui,
-    cfhdb::{bt::{PreCheckedBtDevice, PreCheckedBtProfile}, dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile}},
+    cfhdb::{
+        bt::{PreCheckedBtDevice, PreCheckedBtProfile},
+        dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile},
+    },
 };
 
 // Init translations for current crate.
