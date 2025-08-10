@@ -10,6 +10,7 @@ Build-Depends:
     libpci-dev,
     libusb-dev,
     libssl-dev,
+    libdbus-1-dev,
     libadwaita-1-dev,
     desktop-file-utils,
 Rules-Requires-Root: no
