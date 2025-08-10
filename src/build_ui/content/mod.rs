@@ -597,7 +597,7 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_3932420"
         | "bt_class_name_4063492"
         | "bt_class_name_8257796"
-        | "bt_class_name_16711940" => Some("Desktop workstations"),
+        | "bt_class_name_16711940" => Some("uninterruptible-power-supply-symbolic"),
         "bt_class_name_268"
         | "bt_class_name_131340"
         | "bt_class_name_393484"
@@ -621,17 +621,17 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_7995660"
         | "bt_class_name_8257804"
         | "bt_class_name_1048844"
-        | "bt_class_name_16711948" => Some("Laptops"),
+        | "bt_class_name_16711948" => Some("computer-laptop-symbolic"),
         "bt_class_name_278"
         | "bt_class_name_1048852"
         | "bt_class_name_1179924"
         | "bt_class_name_1704212"
-        | "bt_class_name_10092820" => Some("Palm-sized PCs/PDA"),
+        | "bt_class_name_10092820" => Some("computer-laptop-symbolic"),
         "bt_class_name_131344"
         | "bt_class_name_655632"
         | "bt_class_name_1704208"
         | "bt_class_name_2752784"
-        | "bt_class_name_13762832" => Some("Handheld PCs/PDA"),
+        | "bt_class_name_13762832" => Some("tablet-symbolic"),
         "bt_class_name_516"
         | "bt_class_name_1049092"
         | "bt_class_name_1573380"
@@ -647,12 +647,12 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_5898756"
         | "bt_class_name_5906948"
         | "bt_class_name_6160900"
-        | "bt_class_name_7471620" => Some("Cellular devices"),
+        | "bt_class_name_7471620" => Some("phone-symbolic"),
         "bt_class_name_520"
         | "bt_class_name_1049096"
         | "bt_class_name_524808"
         | "bt_class_name_5374472"
-        | "bt_class_name_5898760" => Some("Cordless devices"),
+        | "bt_class_name_5898760" => Some("network-transmit-symbolic"),
         "bt_class_name_1032"
         | "bt_class_name_2098184"
         | "bt_class_name_2360328"
@@ -663,20 +663,20 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_7472136"
         | "bt_class_name_7603208"
         | "bt_class_name_7734280"
-        | "bt_class_name_15991812" => Some("Hands-free devices"),
+        | "bt_class_name_15991812" => Some("audio-headset-symbolic"),
         "bt_class_name_1052" | "bt_class_name_656412" | "bt_class_name_6947868" => {
-            Some("Portable audio devices")
+            Some("audio-speakers-symbolic")
         }
-        "bt_class_name_1060" => Some("Set-top boxes"),
-        "bt_class_name_1084" | "bt_class_name_525372" => Some("Video displays"),
-        "bt_class_name_525848" => Some("Displays"),
-        "bt_class_name_1288" | "bt_class_name_1412" => Some("Joysticks"),
-        "bt_class_name_1344" | "bt_class_name_9536" => Some("Keyboards"),
-        "bt_class_name_1796" | "bt_class_name_2361092" => Some("Wrist watches"),
-        "bt_class_name_2312" => Some("Thermometers"),
-        "bt_class_name_9484" => Some("Remote controls"),
-        "bt_class_name_9600" => Some("Pointing devices"),
-        "bt_class_name_9620" => Some("Digitizer tablets"),
+        "bt_class_name_1060" => Some("drive-multidisk-symbolic"),
+        "bt_class_name_1084" | "bt_class_name_525372" => Some("video-display-symbolic"),
+        "bt_class_name_525848" => Some("video-display-symbolic"),
+        "bt_class_name_1288" | "bt_class_name_1412" => Some("input-gaming-symbolic"),
+        "bt_class_name_1344" | "bt_class_name_9536" => Some("input-keyboard-symbolic"),
+        "bt_class_name_1796" | "bt_class_name_2361092" => Some("stopwatch-symbolic"),
+        "bt_class_name_2312" => Some("sensors-temperature-symbolic"),
+        "bt_class_name_9484" => Some("input-tvremote-symbolic"),
+        "bt_class_name_9600" => Some("input-mouse-symbolic"),
+        "bt_class_name_9620" => Some("input-tablet-symbolic"),
         "bt_class_name_66060"
         | "bt_class_name_66816"
         | "bt_class_name_5243404"
@@ -686,10 +686,10 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_7340556"
         | "bt_class_name_7471628"
         | "bt_class_name_7864844"
-        | "bt_class_name_7995916" => Some("Smartphones"),
-        "bt_class_name_263744" => Some("Scanners"),
-        "bt_class_name_263808" | "bt_class_name_1312384" => Some("Printers"),
-        "bt_class_name_5374476" => Some("Palm-sized PCs/PDA"),
+        | "bt_class_name_7995916" => Some("phone-symbolic"),
+        "bt_class_name_263744" => Some("scanner-symbolic"),
+        "bt_class_name_263808" | "bt_class_name_1312384" => Some("printer-symbolic"),
+        "bt_class_name_5374476" => Some("computer-laptop-symbolic"),
         "bt_class_name_2098180"
         | "bt_class_name_2360324"
         | "bt_class_name_2884612"
@@ -699,11 +699,11 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         | "bt_class_name_11625476"
         | "bt_class_name_11863044"
         | "bt_class_name_11887620"
-        | "bt_class_name_16131076" => Some("Wearable headset devices"),
-        "bt_class_name_2360340" => Some("Loudspeakers"),
-        "bt_class_name_2228508" => Some("Tablets"),
-        "bt_class_name_4063496" => Some("Server-class computers"),
-        "bt_class_name_4194832" => Some("Wired modems or voice gateways"),
+        | "bt_class_name_16131076" => Some("audio-headset-symbolic"),
+        "bt_class_name_2360340" => Some("audio-speakers-symbolic"),
+        "bt_class_name_2228508" => Some("input-tablet-symbolic"),
+        "bt_class_name_4063496" => Some("network-server-symbolic"),
+        "bt_class_name_4194832" => Some("modem-symbolic"),
         //
         _ => None,
     }
