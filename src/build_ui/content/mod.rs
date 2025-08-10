@@ -166,7 +166,7 @@ pub fn main_content(
     let dmi_row = custom_stack_selection_button(
         String::from("dmi"),
         t!("dmi_row_title").to_string(),
-        String::from(""),
+        String::from("application-x-firmware-symbolic"),
     );
 
     // Create placeholder pages for each class
@@ -267,7 +267,7 @@ pub fn main_content(
             class.clone(),
             class_i18n,
             get_icon_for_class(&class)
-                .unwrap_or("dialog-question-symbolic")
+                .unwrap_or("drive-harddisk-usb-symbolic")
                 .into(),
         ));
     }
@@ -321,7 +321,7 @@ pub fn main_content(
             class.clone(),
             class_i18n,
             get_icon_for_class(&class)
-                .unwrap_or("dialog-question-symbolic")
+                .unwrap_or("bluetooth-symbolic")
                 .into(),
         ));
     }
