@@ -16,6 +16,7 @@ pub struct PreCheckedBtDevice {
 pub struct PreCheckedBtProfile {
     profile: CfhdbBtProfile,
     installed: Arc<Mutex<bool>>,
+    pub used: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedBtProfile {
@@ -23,6 +24,7 @@ impl PreCheckedBtProfile {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
+            used: Arc::new(Mutex::new(false))
         }
     }
     pub fn profile(&self) -> CfhdbBtProfile {

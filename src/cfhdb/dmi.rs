@@ -15,6 +15,7 @@ pub struct PreCheckedDmiInfo {
 pub struct PreCheckedDmiProfile {
     profile: CfhdbDmiProfile,
     installed: Arc<Mutex<bool>>,
+    pub used: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedDmiProfile {
@@ -22,6 +23,7 @@ impl PreCheckedDmiProfile {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
+            used: Arc::new(Mutex::new(false))
         }
     }
     pub fn profile(&self) -> CfhdbDmiProfile {

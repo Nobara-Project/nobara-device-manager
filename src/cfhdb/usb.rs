@@ -16,6 +16,7 @@ pub struct PreCheckedUsbDevice {
 pub struct PreCheckedUsbProfile {
     profile: CfhdbUsbProfile,
     installed: Arc<Mutex<bool>>,
+    pub used: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedUsbProfile {
@@ -23,6 +24,7 @@ impl PreCheckedUsbProfile {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
+            used: Arc::new(Mutex::new(false))
         }
     }
     pub fn profile(&self) -> CfhdbUsbProfile {

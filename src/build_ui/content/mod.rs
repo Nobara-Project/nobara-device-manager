@@ -132,10 +132,23 @@ pub fn main_content(
 
     window_stack.add_titled(&placeholder, Some("dmi"), &t!("dmi_row_title"));
 
+    for profile in dmi_info.clone().profiles {
+        *profile.used.lock().unwrap() = true;
+        profile.update_installed();
+    }
+
     // Store the devices for lazy loading
     let window_clone = window.clone();
     let theme_changed_action_clone = theme_changed_action.clone();
     let update_device_status_action_clone = update_device_status_action.clone();
+
+    let dmi_row = custom_stack_selection_button(
+        String::from("dmi"),
+        String::from("dmi"),
+        String::from("application-x-firmware-symbolic"),
+    );
+
+    let dmi_row_clone0 = dmi_row.clone();
 
     // Connect to the "map" signal to load content when page becomes visible
     placeholder.connect_map(move |placeholder| {
@@ -147,14 +160,19 @@ pub fn main_content(
         }
 
         // Create the actual content
-        let content = create_dmi_class(
+        let (dmi_name, content) = create_dmi_class(
             &window_clone,
             &dmi_info,
-            &t!("dmi_row_title").to_string(),
             &theme_changed_action_clone,
             &update_device_status_action_clone,
         );
+
+        let mut short_dmi = dmi_name.clone();
+        short_dmi.truncate(15);
+
         content.set_widget_name("content_loaded");
+
+        dmi_row_clone0.child().unwrap().downcast::<gtk::Box>().unwrap().last_child().unwrap().set_property("label", &short_dmi);
 
         // Replace the placeholder with the actual content
         while let Some(child) = placeholder.first_child() {
@@ -162,12 +180,6 @@ pub fn main_content(
         }
         placeholder.append(&content);
     });
-
-    let dmi_row = custom_stack_selection_button(
-        String::from("dmi"),
-        t!("dmi_row_title").to_string(),
-        String::from("application-x-firmware-symbolic"),
-    );
 
     // Create placeholder pages for each class
     for (class, devices) in hashmap_pci {
@@ -178,6 +190,13 @@ pub fn main_content(
         let placeholder = create_placeholder_page(&class_i18n);
 
         window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        for device in devices.clone() {
+            for profile in device.profiles {
+                *profile.used.lock().unwrap() = true;
+                profile.update_installed();
+            }
+        }
 
         // Store the devices for lazy loading
         let devices_clone = devices.clone();
@@ -229,6 +248,13 @@ pub fn main_content(
         let placeholder = create_placeholder_page(&class_i18n);
 
         window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        for device in devices.clone() {
+            for profile in device.profiles {
+                *profile.used.lock().unwrap() = true;
+                profile.update_installed();
+            }
+        }
 
         // Store the devices for lazy loading
         let devices_clone = devices.clone();
@@ -283,6 +309,13 @@ pub fn main_content(
         let placeholder = create_placeholder_page(&class_i18n);
 
         window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        for device in devices.clone() {
+            for profile in device.profiles {
+                *profile.used.lock().unwrap() = true;
+                profile.update_installed();
+            }
+        }
 
         // Store the devices for lazy loading
         let devices_clone = devices.clone();

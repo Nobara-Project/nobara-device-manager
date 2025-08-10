@@ -2,6 +2,7 @@ use std::{rc::Rc, sync::Arc};
 
 use adw::{prelude::*, AlertDialog};
 use gtk::gio::SimpleAction;
+use gtk::CheckButton;
 use gtk::{glib::clone, Orientation};
 
 use crate::cfhdb::bt::PreCheckedBtProfile;
@@ -22,6 +23,23 @@ pub fn all_profile_dialog(
     usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>,
     bt_profiles: &Rc<Vec<Arc<PreCheckedBtProfile>>>,
 ) -> AlertDialog {
+    let dialog_child_box = gtk::Box::new(Orientation::Vertical, 0);
+    let hide_noninstalled_profiles_checkbutton = gtk::CheckButton::builder()
+        .label(t!("hide_noninstalled_profiles_checkbutton_label"))
+        .build();
+    let hide_noncompatible_profiles_checkbutton = gtk::CheckButton::builder()
+        .label(t!("hide_noncompatible_profiles_checkbutton_label"))
+        .build();
+    let profiles_checkbutton_box = gtk::Box::builder()
+        .orientation(Orientation::Horizontal)
+        .spacing(5)
+        .margin_top(5)
+        .margin_bottom(5)
+        .margin_start(5)
+        .margin_end(5)
+        .build();
+    profiles_checkbutton_box.append(&hide_noninstalled_profiles_checkbutton);
+    profiles_checkbutton_box.append(&hide_noncompatible_profiles_checkbutton);
     let boxedlist = gtk::ListBox::builder()
         .vexpand(true)
         .hexpand(true)
@@ -40,8 +58,10 @@ pub fn all_profile_dialog(
         .hexpand(true)
         .child(&boxedlist)
         .build();
+    dialog_child_box.append(&profiles_checkbutton_box);
+    dialog_child_box.append(&scroll);
     let dialog = AlertDialog::builder()
-        .extra_child(&scroll)
+        .extra_child(&dialog_child_box)
         .heading(t!(format!("all_profile_dialog_heading")))
         .build();
     dialog.add_response(
@@ -171,9 +191,15 @@ pub fn all_profile_dialog(
             }
         ));
         //
+        let recheck_hide_closure = clone!(#[strong] profile_expander_row, #[strong] profile, #[strong] hide_noncompatible_profiles_checkbutton, #[strong] hide_noninstalled_profiles_checkbutton, move |_: &CheckButton| {
+            profile_expander_row.set_visible(recheck_hide(hide_noncompatible_profiles_checkbutton.is_active(), hide_noninstalled_profiles_checkbutton.is_active(), *profile.used.lock().unwrap(), profile.installed()));
+        });
+        hide_noninstalled_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        hide_noncompatible_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        //
         boxedlist.append(&profile_expander_row);
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_device_status_action.connect_activate(clone!(#[strong] hide_noninstalled_profiles_checkbutton, move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -182,6 +208,7 @@ pub fn all_profile_dialog(
                 profile_remove_button.set_sensitive(false);
             }
             profile_status_icon.set_visible(profile_status);
+            hide_noninstalled_profiles_checkbutton.emit_by_name::<()>("toggled", &[]);
         }));
     }
     //
@@ -306,9 +333,15 @@ pub fn all_profile_dialog(
             }
         ));
         //
+        let recheck_hide_closure = clone!(#[strong] profile_expander_row, #[strong] profile, #[strong] hide_noncompatible_profiles_checkbutton, #[strong] hide_noninstalled_profiles_checkbutton, move |_: &CheckButton| {
+            profile_expander_row.set_visible(recheck_hide(hide_noncompatible_profiles_checkbutton.is_active(), hide_noninstalled_profiles_checkbutton.is_active(), *profile.used.lock().unwrap(), profile.installed()));
+        });
+        hide_noninstalled_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        hide_noncompatible_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        //
         boxedlist.append(&profile_expander_row);
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_device_status_action.connect_activate(clone!(#[strong] hide_noninstalled_profiles_checkbutton, move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -317,6 +350,7 @@ pub fn all_profile_dialog(
                 profile_remove_button.set_sensitive(false);
             }
             profile_status_icon.set_visible(profile_status);
+            hide_noninstalled_profiles_checkbutton.emit_by_name::<()>("toggled", &[]);
         }));
     }
     //
@@ -441,9 +475,15 @@ pub fn all_profile_dialog(
             }
         ));
         //
+        let recheck_hide_closure = clone!(#[strong] profile_expander_row, #[strong] profile, #[strong] hide_noncompatible_profiles_checkbutton, #[strong] hide_noninstalled_profiles_checkbutton, move |_: &CheckButton| {
+            profile_expander_row.set_visible(recheck_hide(hide_noncompatible_profiles_checkbutton.is_active(), hide_noninstalled_profiles_checkbutton.is_active(), *profile.used.lock().unwrap(), profile.installed()));
+        });
+        hide_noninstalled_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        hide_noncompatible_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        //
         boxedlist.append(&profile_expander_row);
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_device_status_action.connect_activate(clone!(#[strong] hide_noninstalled_profiles_checkbutton, move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -452,6 +492,7 @@ pub fn all_profile_dialog(
                 profile_remove_button.set_sensitive(false);
             }
             profile_status_icon.set_visible(profile_status);
+            hide_noninstalled_profiles_checkbutton.emit_by_name::<()>("toggled", &[]);
         }));
     }
     //
@@ -576,9 +617,15 @@ pub fn all_profile_dialog(
             }
         ));
         //
+        let recheck_hide_closure = clone!(#[strong] profile_expander_row, #[strong] profile, #[strong] hide_noncompatible_profiles_checkbutton, #[strong] hide_noninstalled_profiles_checkbutton, move |_: &CheckButton| {
+            profile_expander_row.set_visible(recheck_hide(hide_noncompatible_profiles_checkbutton.is_active(), hide_noninstalled_profiles_checkbutton.is_active(), *profile.used.lock().unwrap(), profile.installed()));
+        });
+        hide_noninstalled_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        hide_noncompatible_profiles_checkbutton.connect_toggled(recheck_hide_closure.clone());
+        //
         boxedlist.append(&profile_expander_row);
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_device_status_action.connect_activate(clone!(#[strong] hide_noninstalled_profiles_checkbutton, move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -587,7 +634,24 @@ pub fn all_profile_dialog(
                 profile_remove_button.set_sensitive(false);
             }
             profile_status_icon.set_visible(profile_status);
+            hide_noninstalled_profiles_checkbutton.emit_by_name::<()>("toggled", &[]);
         }));
     }
     dialog
+}
+
+fn recheck_hide(only_comapt: bool, only_install: bool, is_compat: bool, is_installed: bool) -> bool {
+    if only_comapt && only_install {
+        // Only show if BOTH compatible AND installed
+        is_compat && is_installed
+    } else if only_comapt {
+        // Show if compatible
+        is_compat
+    } else if only_install {
+        // Show if installed
+        is_installed
+    } else {
+        // Default: show if compatible
+        true
+    }
 }

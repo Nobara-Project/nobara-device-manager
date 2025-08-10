@@ -7,7 +7,7 @@ use gtk::{
     glib::{clone, MainContext},
     Align, Orientation,
     Orientation::Vertical,
-    ScrolledWindow, SelectionMode,
+    ScrolledWindow,
 };
 use pikd_pharser_rs::{init_pikd_with_duct, PikChannel};
 
@@ -16,40 +16,21 @@ use std::{process::Command, rc::Rc, sync::Arc, thread};
 pub fn create_dmi_class(
     window: &ApplicationWindow,
     info: &PreCheckedDmiInfo,
-    class: &str,
     theme_changed_action: &gio::SimpleAction,
     update_info_status_action: &gio::SimpleAction,
-) -> ScrolledWindow {
+) -> (String, ScrolledWindow) {
     // Update all profiles' installation status before creating the UI
     for profile in &info.profiles {
         profile.update_installed();
     }
 
-    let info_list_row = gtk::ListBox::builder()
-        .margin_top(20)
-        .margin_bottom(20)
-        .margin_start(20)
-        .margin_end(20)
-        .selection_mode(SelectionMode::Browse)
-        .vexpand(true)
-        .hexpand(true)
-        .build();
-    info_list_row.add_css_class("boxed-list");
-    //
-    let info_navigation_page_toolbar = adw::ToolbarView::builder().content(&info_list_row).build();
-    info_navigation_page_toolbar.add_top_bar(
-        &adw::HeaderBar::builder()
-            .show_end_title_buttons(false)
-            .show_start_title_buttons(false)
-            .build(),
+    let navigation_view = dmi_info_page(
+            &window,
+            &info,
+            &theme_changed_action,
+            &update_info_status_action,
     );
-    let info_navigation_page = adw::NavigationPage::builder()
-        .title(class)
-        .child(&info_navigation_page_toolbar)
-        .build();
-    //
-    let navigation_view = adw::NavigationView::builder().build();
-    navigation_view.add(&info_navigation_page);
+
     let scroll = gtk::ScrolledWindow::builder()
         .max_content_width(650)
         .min_content_width(300)
@@ -58,46 +39,9 @@ pub fn create_dmi_class(
         .build();
     //
     let info_content = &info.info;
-    let info_title = format!(
-        "{} - {}",
-        &info_content.board_vendor, &info_content.product_name
-    );
-    let info_navigation_page_toolbar = adw::ToolbarView::builder()
-        .content(&dmi_info_page(
-            &window,
-            &info,
-            &theme_changed_action,
-            &update_info_status_action,
-        ))
-        .build();
-    info_navigation_page_toolbar.add_top_bar(
-        &adw::HeaderBar::builder()
-            .show_end_title_buttons(false)
-            .show_start_title_buttons(false)
-            .build(),
-    );
-    let info_navigation_page = adw::NavigationPage::builder()
-        .title(&info_title)
-        .child(&info_navigation_page_toolbar)
-        .build();
-    navigation_view.add(&info_navigation_page);
-    let action_row = adw::ActionRow::builder()
-        .title(&info_title)
-        .subtitle(&info_content.board_asset_tag)
-        .activatable(true)
-        .build();
-    action_row.connect_activated(clone!(
-        #[weak]
-        navigation_view,
-        #[weak]
-        info_navigation_page,
-        move |_| {
-            navigation_view.push(&info_navigation_page);
-        }
-    ));
-    info_list_row.append(&action_row);
+    let info_title = info_content.product_name.clone();
 
-    scroll
+    (info_title, scroll)
 }
 
 fn dmi_info_page(
