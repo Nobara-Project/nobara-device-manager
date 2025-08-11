@@ -16,10 +16,10 @@ pub enum ChannelMsg {
     SuccessMsg,
     UpdateMsg,
     SuccessMsgDeviceFetch(
-        Vec<(String, Vec<PreCheckedPciDevice>)>,
-        Vec<(String, Vec<PreCheckedUsbDevice>)>,
+        Option<Vec<(String, Vec<PreCheckedPciDevice>)>>,
+        Option<Vec<(String, Vec<PreCheckedUsbDevice>)>>,
         PreCheckedDmiInfo,
-        Vec<(String, Vec<PreCheckedBtDevice>)>,
+        Option<Vec<(String, Vec<PreCheckedBtDevice>)>>,
         Vec<Arc<PreCheckedPciProfile>>,
         Vec<Arc<PreCheckedUsbProfile>>,
         Vec<Arc<PreCheckedDmiProfile>>,

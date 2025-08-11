@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::{
@@ -23,39 +23,6 @@ use gtk::{
 };
 use rayon;
 use rayon::prelude::*;
-
-macro_rules! rayon_join {
-    ($a1:expr, $a2:expr) => {{
-        rayon::join($a1, $a2)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr) => {{
-        let ((r1, r2), r3) = rayon::join(|| rayon_join!($a1, $a2), $a3);
-        (r1, r2, r3)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr, $a4:expr) => {{
-        let ((r1, r2), (r3, r4)) = rayon::join(|| join!($a1, $a2), || join!($a3, $a4));
-        (r1, r2, r3, r4)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr) => {{
-        let ((r1, r2, r3), (r4, r5)) = rayon::join(|| join!($a1, $a2, $a3), || join!($a4, $a5));
-        (r1, r2, r3, r4, r5)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr) => {{
-        let ((r1, r2, r3), (r4, r5, r6)) =
-            rayon::join(|| join!($a1, $a2, $a3), || join!($a4, $a5, $a6));
-        (r1, r2, r3, r4, r5, r6)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr) => {{
-        let ((r1, r2, r3, r4), (r5, r6, r7)) =
-            rayon::join(|| join!($a1, $a2, $a3, $a4), || join!($a5, $a6, $a7));
-        (r1, r2, r3, r4, r5, r6, r7)
-    }};
-    ($a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr, $a8:expr) => {{
-        let ((r1, r2, r3, r4), (r5, r6, r7, r8)) =
-            rayon::join(|| join!($a1, $a2, $a3, $a4), || join!($a5, $a6, $a7, $a8));
-        (r1, r2, r3, r4, r5, r6, r7, r8)
-    }};
-}
 
 const PERM_FIX_PROG: &str = r###"
 #! /bin/bash
@@ -361,57 +328,80 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
         let bt_devices_time = bt_devices_start.elapsed();
         println!("[PERF] BT devices processing took: {:?}", bt_devices_time);
 
-        match (hashmap_pci_result, hashmap_usb_result, hashmap_bt_result) {
-            (Some(hashmap_pci), Some(hashmap_usb), Some(hashmap_bt)) => {
-                status_sender
-                    .send_blocking(ChannelMsg::OutputLine(format!(
-                        "[{}] {}",
-                        t!("info"),
-                        t!("sorting_devices")
-                    )))
-                    .expect("Channel closed");
+        status_sender
+            .send_blocking(ChannelMsg::OutputLine(format!(
+                "[{}] {}",
+                t!("info"),
+                t!("sorting_devices")
+            )))
+            .expect("Channel closed");
 
-                // Convert to vectors
-                let convert_start = Instant::now();
-                let mut pci_vec: Vec<(String, Vec<PreCheckedPciDevice>)> =
+        let convert_start = Instant::now();
+        let pci_vec = match hashmap_pci_result {
+            Some(hashmap_pci) => {
+                let pci_vec: Vec<(String, Vec<PreCheckedPciDevice>)> =
                     hashmap_pci.into_iter().collect();
-                let mut usb_vec: Vec<(String, Vec<PreCheckedUsbDevice>)> =
+                Some(Arc::new(Mutex::new(pci_vec)))
+            }
+            None => None,
+        };
+        let usb_vec = match hashmap_usb_result {
+            Some(hashmap_usb) => {
+                let usb_vec: Vec<(String, Vec<PreCheckedUsbDevice>)> =
                     hashmap_usb.into_iter().collect();
-                let mut bt_vec: Vec<(String, Vec<PreCheckedBtDevice>)> =
+                Some(Arc::new(Mutex::new(usb_vec)))
+            }
+            None => None,
+        };
+        let bt_vec = match hashmap_bt_result {
+            Some(hashmap_bt) => {
+                let bt_vec: Vec<(String, Vec<PreCheckedBtDevice>)> =
                     hashmap_bt.into_iter().collect();
-                let convert_time = convert_start.elapsed();
-                println!(
-                    "[PERF] Converting hashmaps to vectors took: {:?}",
-                    convert_time
-                );
+                Some(Arc::new(Mutex::new(bt_vec)))
+            }
+            None => None,
+        };
 
-                // Sort the vectors in parallel
-                let sort_start = Instant::now();
-                rayon_join!(
+        let convert_time = convert_start.elapsed();
+        println!(
+            "[PERF] Converting hashmaps to vectors took: {:?}",
+            convert_time
+        );
+
+        let sort_start = Instant::now();
+        let sort_time = sort_start.elapsed();
+
+        match (pci_vec.as_ref(), usb_vec.as_ref(), bt_vec.as_ref()) {
+            (Some(pci_vec), Some(usb_vec), Some(bt_vec)) => {
+                rayon::join(
                     || {
-                        pci_vec.par_sort_by(|a, b| {
-                            let a_class = t!(format!("pci_class_name_{}", a.0))
-                                .to_string()
-                                .to_lowercase();
-                            let b_class = t!(format!("pci_class_name_{}", b.0))
-                                .to_string()
-                                .to_lowercase();
-                            b_class.cmp(&a_class)
-                        });
+                        rayon::join(
+                            || {
+                                pci_vec.lock().unwrap().par_sort_by(|a, b| {
+                                    let a_class = t!(format!("pci_class_name_{}", a.0))
+                                        .to_string()
+                                        .to_lowercase();
+                                    let b_class = t!(format!("pci_class_name_{}", b.0))
+                                        .to_string()
+                                        .to_lowercase();
+                                    b_class.cmp(&a_class)
+                                })
+                            },
+                            || {
+                                usb_vec.lock().unwrap().par_sort_by(|a, b| {
+                                    let a_class = t!(format!("usb_class_name_{}", a.0))
+                                        .to_string()
+                                        .to_lowercase();
+                                    let b_class = t!(format!("usb_class_name_{}", b.0))
+                                        .to_string()
+                                        .to_lowercase();
+                                    b_class.cmp(&a_class)
+                                })
+                            },
+                        )
                     },
                     || {
-                        usb_vec.par_sort_by(|a, b| {
-                            let a_class = t!(format!("usb_class_name_{}", a.0))
-                                .to_string()
-                                .to_lowercase();
-                            let b_class = t!(format!("usb_class_name_{}", b.0))
-                                .to_string()
-                                .to_lowercase();
-                            b_class.cmp(&a_class)
-                        });
-                    },
-                    || {
-                        bt_vec.par_sort_by(|a, b| {
+                        bt_vec.lock().unwrap().par_sort_by(|a, b| {
                             let a_class = t!(format!("bt_class_name_{}", a.0))
                                 .to_string()
                                 .to_lowercase();
@@ -419,42 +409,150 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                                 .to_string()
                                 .to_lowercase();
                             b_class.cmp(&a_class)
-                        });
-                    }
+                        })
+                    },
                 );
-                let sort_time = sort_start.elapsed();
-                println!("[PERF] Sorting vectors took: {:?}", sort_time);
-
-                let total_time = total_start.elapsed();
-                println!("[PERF] Total loading time: {:?}", total_time);
-
-                status_sender
-                    .send_blocking(ChannelMsg::OutputLine(format!(
-                        "[{}] {}",
-                        t!("info"),
-                        t!("loading_complete")
-                    )))
-                    .expect("Channel closed");
-
-                status_sender
-                    .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(
-                        pci_vec,
-                        usb_vec,
-                        dmi_info,
-                        bt_vec,
-                        pci_profiles,
-                        usb_profiles,
-                        dmi_profiles,
-                        bt_profiles,
-                    ))
-                    .expect("Channel closed");
             }
-            (_, _, _) => {
-                status_sender
-                    .send_blocking(ChannelMsg::FailMsg)
-                    .expect("Channel closed");
-                panic!();
+            (Some(pci_vec), Some(usb_vec), None) => {
+                rayon::join(
+                    || {
+                        pci_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("pci_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("pci_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                    || {
+                        usb_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("usb_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("usb_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                );
             }
+            (Some(pci_vec), None, Some(bt_vec)) => {
+                rayon::join(
+                    || {
+                        bt_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("bt_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("bt_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                    || {
+                        pci_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("pci_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("pci_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                );
+            }
+            (None, Some(usb_vec), Some(bt_vec)) => {
+                rayon::join(
+                    || {
+                        bt_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("bt_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("bt_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                    || {
+                        usb_vec.lock().unwrap().par_sort_by(|a, b| {
+                            let a_class = t!(format!("usb_class_name_{}", a.0))
+                                .to_string()
+                                .to_lowercase();
+                            let b_class = t!(format!("usb_class_name_{}", b.0))
+                                .to_string()
+                                .to_lowercase();
+                            b_class.cmp(&a_class)
+                        })
+                    },
+                );
+            }
+            (Some(pci_vec), None, None) => pci_vec.lock().unwrap().par_sort_by(|a, b| {
+                let a_class = t!(format!("pci_class_name_{}", a.0))
+                    .to_string()
+                    .to_lowercase();
+                let b_class = t!(format!("pci_class_name_{}", b.0))
+                    .to_string()
+                    .to_lowercase();
+                b_class.cmp(&a_class)
+            }),
+            (None, Some(usb_vec), None) => usb_vec.lock().unwrap().par_sort_by(|a, b| {
+                let a_class = t!(format!("usb_class_name_{}", a.0))
+                    .to_string()
+                    .to_lowercase();
+                let b_class = t!(format!("usb_class_name_{}", b.0))
+                    .to_string()
+                    .to_lowercase();
+                b_class.cmp(&a_class)
+            }),
+            (None, None, Some(bt_vec)) => bt_vec.lock().unwrap().par_sort_by(|a, b| {
+                let a_class = t!(format!("bt_class_name_{}", a.0))
+                    .to_string()
+                    .to_lowercase();
+                let b_class = t!(format!("bt_class_name_{}", b.0))
+                    .to_string()
+                    .to_lowercase();
+                b_class.cmp(&a_class)
+            }),
+            (None, None, None) => {}
         }
+
+        println!("[PERF] Sorting vectors took: {:?}", sort_time);
+
+        let total_time = total_start.elapsed();
+        println!("[PERF] Total loading time: {:?}", total_time);
+        status_sender
+            .send_blocking(ChannelMsg::OutputLine(format!(
+                "[{}] {}",
+                t!("info"),
+                t!("loading_complete")
+            )))
+            .expect("Channel closed");
+
+        status_sender
+            .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(
+                match pci_vec {
+                    Some(t) => Some(t.lock().unwrap().clone()),
+                    None => None
+                },
+                match usb_vec {
+                    Some(t) => Some(t.lock().unwrap().clone()),
+                    None => None
+                },
+                dmi_info,
+                match bt_vec {
+                    Some(t) => Some(t.lock().unwrap().clone()),
+                    None => None
+                },
+                pci_profiles,
+                usb_profiles,
+                dmi_profiles,
+                bt_profiles,
+            ))
+            .expect("Channel closed");
     });
 }

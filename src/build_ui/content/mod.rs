@@ -32,10 +32,10 @@ use usb::create_usb_class;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
-    hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
-    hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
+    hashmap_pci: Option<Vec<(String, Vec<PreCheckedPciDevice>)>>,
+    hashmap_usb: Option<Vec<(String, Vec<PreCheckedUsbDevice>)>>,
     dmi_info: PreCheckedDmiInfo,
-    hashmap_bt: Vec<(String, Vec<PreCheckedBtDevice>)>,
+    hashmap_bt: Option<Vec<(String, Vec<PreCheckedBtDevice>)>>,
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
     dmi_profiles: Vec<Arc<PreCheckedDmiProfile>>,
@@ -172,7 +172,14 @@ pub fn main_content(
 
         content.set_widget_name("content_loaded");
 
-        dmi_row_clone0.child().unwrap().downcast::<gtk::Box>().unwrap().last_child().unwrap().set_property("label", &short_dmi);
+        dmi_row_clone0
+            .child()
+            .unwrap()
+            .downcast::<gtk::Box>()
+            .unwrap()
+            .last_child()
+            .unwrap()
+            .set_property("label", &short_dmi);
 
         // Replace the placeholder with the actual content
         while let Some(child) = placeholder.first_child() {
@@ -182,181 +189,196 @@ pub fn main_content(
     });
 
     // Create placeholder pages for each class
-    for (class, devices) in hashmap_pci {
-        let class = format!("pci_class_name_{}", class);
-        let class_i18n = t!(class).to_string();
+    match hashmap_pci {
+        Some(hashmap_pci) => {
+            for (class, devices) in hashmap_pci {
+                let class = format!("pci_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
 
-        // Create a placeholder page with a loading spinner
-        let placeholder = create_placeholder_page(&class_i18n);
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
 
-        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
 
-        for device in devices.clone() {
-            for profile in device.profiles {
-                *profile.used.lock().unwrap() = true;
-                profile.update_installed();
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
+                }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_pci_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                pci_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("dialog-question-symbolic")
+                        .into(),
+                ));
             }
         }
-
-        // Store the devices for lazy loading
-        let devices_clone = devices.clone();
-        let window_clone = window.clone();
-        let theme_changed_action_clone = theme_changed_action.clone();
-        let update_device_status_action_clone = update_device_status_action.clone();
-        let class_i18n_clone = class_i18n.clone();
-
-        // Connect to the "map" signal to load content when page becomes visible
-        placeholder.connect_map(move |placeholder| {
-            // Check if this page has already been loaded
-            if let Some(child) = placeholder.first_child() {
-                if child.widget_name() == "content_loaded" {
-                    return;
-                }
-            }
-
-            // Create the actual content
-            let content = create_pci_class(
-                &window_clone,
-                &devices_clone,
-                &class_i18n_clone,
-                &theme_changed_action_clone,
-                &update_device_status_action_clone,
-            );
-            content.set_widget_name("content_loaded");
-
-            // Replace the placeholder with the actual content
-            while let Some(child) = placeholder.first_child() {
-                placeholder.remove(&child);
-            }
-            placeholder.append(&content);
-        });
-
-        pci_rows.push(custom_stack_selection_button(
-            class.clone(),
-            class_i18n,
-            get_icon_for_class(&class)
-                .unwrap_or("dialog-question-symbolic")
-                .into(),
-        ));
+        None => {}
     }
 
-    for (class, devices) in hashmap_usb {
-        let class = format!("usb_class_name_{}", class);
-        let class_i18n = t!(class).to_string();
+    match hashmap_usb {
+        Some(hashmap_usb) => {
+            for (class, devices) in hashmap_usb {
+                let class = format!("usb_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
 
-        // Create a placeholder page with a loading spinner
-        let placeholder = create_placeholder_page(&class_i18n);
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
 
-        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
 
-        for device in devices.clone() {
-            for profile in device.profiles {
-                *profile.used.lock().unwrap() = true;
-                profile.update_installed();
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
+                }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_usb_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                usb_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("drive-harddisk-usb-symbolic")
+                        .into(),
+                ));
             }
         }
-
-        // Store the devices for lazy loading
-        let devices_clone = devices.clone();
-        let window_clone = window.clone();
-        let theme_changed_action_clone = theme_changed_action.clone();
-        let update_device_status_action_clone = update_device_status_action.clone();
-        let class_i18n_clone = class_i18n.clone();
-
-        // Connect to the "map" signal to load content when page becomes visible
-        placeholder.connect_map(move |placeholder| {
-            // Check if this page has already been loaded
-            if let Some(child) = placeholder.first_child() {
-                if child.widget_name() == "content_loaded" {
-                    return;
-                }
-            }
-
-            // Create the actual content
-            let content = create_usb_class(
-                &window_clone,
-                &devices_clone,
-                &class_i18n_clone,
-                &theme_changed_action_clone,
-                &update_device_status_action_clone,
-            );
-            content.set_widget_name("content_loaded");
-
-            // Replace the placeholder with the actual content
-            while let Some(child) = placeholder.first_child() {
-                placeholder.remove(&child);
-            }
-            placeholder.append(&content);
-        });
-
-        usb_rows.push(custom_stack_selection_button(
-            class.clone(),
-            class_i18n,
-            get_icon_for_class(&class)
-                .unwrap_or("drive-harddisk-usb-symbolic")
-                .into(),
-        ));
+        None => {}
     }
 
     //
 
     // Create placeholder pages for each class
-    for (class, devices) in hashmap_bt {
-        let class = format!("bt_class_name_{}", class);
-        let class_i18n = t!(class).to_string();
+    match hashmap_bt {
+        Some(hashmap_bt) => {
+            for (class, devices) in hashmap_bt {
+                let class = format!("bt_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
 
-        // Create a placeholder page with a loading spinner
-        let placeholder = create_placeholder_page(&class_i18n);
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
 
-        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
 
-        for device in devices.clone() {
-            for profile in device.profiles {
-                *profile.used.lock().unwrap() = true;
-                profile.update_installed();
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
+                }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_bt_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                bt_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("bluetooth-symbolic")
+                        .into(),
+                ));
             }
         }
-
-        // Store the devices for lazy loading
-        let devices_clone = devices.clone();
-        let window_clone = window.clone();
-        let theme_changed_action_clone = theme_changed_action.clone();
-        let update_device_status_action_clone = update_device_status_action.clone();
-        let class_i18n_clone = class_i18n.clone();
-
-        // Connect to the "map" signal to load content when page becomes visible
-        placeholder.connect_map(move |placeholder| {
-            // Check if this page has already been loaded
-            if let Some(child) = placeholder.first_child() {
-                if child.widget_name() == "content_loaded" {
-                    return;
-                }
-            }
-
-            // Create the actual content
-            let content = create_bt_class(
-                &window_clone,
-                &devices_clone,
-                &class_i18n_clone,
-                &theme_changed_action_clone,
-                &update_device_status_action_clone,
-            );
-            content.set_widget_name("content_loaded");
-
-            // Replace the placeholder with the actual content
-            while let Some(child) = placeholder.first_child() {
-                placeholder.remove(&child);
-            }
-            placeholder.append(&content);
-        });
-
-        bt_rows.push(custom_stack_selection_button(
-            class.clone(),
-            class_i18n,
-            get_icon_for_class(&class)
-                .unwrap_or("bluetooth-symbolic")
-                .into(),
-        ));
+        None => {}
     }
 
     main_content_overlay_split_view.set_content(Some(&main_content_content(

@@ -25,10 +25,10 @@ pub fn create_dmi_class(
     }
 
     let navigation_view = dmi_info_page(
-            &window,
-            &info,
-            &theme_changed_action,
-            &update_info_status_action,
+        &window,
+        &info,
+        &theme_changed_action,
+        &update_info_status_action,
     );
 
     let scroll = gtk::ScrolledWindow::builder()

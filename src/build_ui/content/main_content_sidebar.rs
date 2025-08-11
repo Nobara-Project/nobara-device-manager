@@ -96,7 +96,6 @@ pub fn main_content_sidebar(
         .margin_top(12)
         .margin_bottom(12)
         .build();
-    main_content_sidebar_box.append(&separator);
 
     // PCI Devices Section
     let pci_label = gtk::Label::builder()
@@ -108,17 +107,14 @@ pub fn main_content_sidebar(
         .build();
     pci_label.add_css_class("heading");
 
-    main_content_sidebar_box.append(&pci_label);
-    main_content_sidebar_box.append(&pci_rows_listbox);
+    if !pci_rows.is_empty() {
+        main_content_sidebar_box.append(&separator);
+        main_content_sidebar_box.append(&pci_label);
+        main_content_sidebar_box.append(&pci_rows_listbox);
 
-    //let mut is_first = true;
-
-    for row in pci_rows {
-        pci_rows_listbox.append(row);
-        /*if is_first {
-            pci_rows_listbox.select_row(Some(row));
-            is_first = false
-        }*/
+        for row in pci_rows {
+            pci_rows_listbox.append(row);
+        }
     }
 
     pci_rows_listbox.connect_row_activated(clone!(
@@ -144,7 +140,6 @@ pub fn main_content_sidebar(
         .margin_top(12)
         .margin_bottom(12)
         .build();
-    main_content_sidebar_box.append(&separator);
 
     // USB Devices Section
     let usb_label = gtk::Label::builder()
@@ -156,11 +151,13 @@ pub fn main_content_sidebar(
         .build();
     usb_label.add_css_class("heading");
 
-    main_content_sidebar_box.append(&usb_label);
-    main_content_sidebar_box.append(&usb_rows_listbox);
-
-    for row in usb_rows {
-        usb_rows_listbox.append(row);
+    if !usb_rows.is_empty() {
+        main_content_sidebar_box.append(&separator);
+        main_content_sidebar_box.append(&usb_label);
+        main_content_sidebar_box.append(&usb_rows_listbox);
+        for row in usb_rows {
+            usb_rows_listbox.append(row);
+        }
     }
 
     usb_rows_listbox.connect_row_activated(clone!(
@@ -186,7 +183,6 @@ pub fn main_content_sidebar(
         .margin_top(12)
         .margin_bottom(12)
         .build();
-    main_content_sidebar_box.append(&separator);
 
     // BT Devices Section
     let bt_label = gtk::Label::builder()
@@ -198,11 +194,13 @@ pub fn main_content_sidebar(
         .build();
     bt_label.add_css_class("heading");
 
-    main_content_sidebar_box.append(&bt_label);
-    main_content_sidebar_box.append(&bt_rows_listbox);
-
-    for row in bt_rows {
-        bt_rows_listbox.append(row);
+    if !bt_rows.is_empty() {
+        main_content_sidebar_box.append(&separator);
+        main_content_sidebar_box.append(&bt_label);
+        main_content_sidebar_box.append(&bt_rows_listbox);
+        for row in bt_rows {
+            bt_rows_listbox.append(row);
+        }
     }
 
     bt_rows_listbox.connect_row_activated(clone!(

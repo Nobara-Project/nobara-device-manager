@@ -24,7 +24,7 @@ impl PreCheckedPciProfile {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
-            used: Arc::new(Mutex::new(false))
+            used: Arc::new(Mutex::new(false)),
         }
     }
     pub fn profile(&self) -> CfhdbPciProfile {
