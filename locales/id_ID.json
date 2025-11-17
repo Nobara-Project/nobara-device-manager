@@ -1,7 +1,7 @@
 {
-    "application_name": "",
-    "developer_name": "",
-    "banner_text_no_internet": "",
+    "application_name": "nama_aplikasi",
+    "developer_name": "nama_developer",
+    "banner_text_no_internet": "banner_text_tidak_ada_internet",
     "error_dialog_ok_label": "",
     "pci_devices": "",
     "usb_devices": "",
