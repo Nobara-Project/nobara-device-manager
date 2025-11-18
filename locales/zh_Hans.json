@@ -49,7 +49,7 @@
     "device_status_inactive_enabled": "非激活状态但已启用",
     "device_status_inactive_disabled": "非激活状态 & 已禁用",
     "pci_download_starting": "下载 PCI 配置文件数据库",
-    "pci_download_successful": "",
+    "pci_download_successful": "PCI 配置数据库已成功下载，加载中…",
     "pci_download_failed": "",
     "pci_download_cache_found": "",
     "pci_download_cache_not_found": "",
