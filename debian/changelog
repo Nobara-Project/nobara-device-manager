@@ -1,4 +1,4 @@
-pika-device-manager (0.1.3-101pika3) pika; urgency=medium
+pika-device-manager (0.1.3-101pika4) pika; urgency=medium
 
   * Fix pikd panic
 
