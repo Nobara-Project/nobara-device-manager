@@ -208,7 +208,7 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
                 status_sender
                     .send_blocking(ChannelMsg::FailMsg)
                     .expect("Channel closed");
-                panic!();
+                //panic!();
             }
         };
         let dmi_process_time = dmi_process_start.elapsed();
