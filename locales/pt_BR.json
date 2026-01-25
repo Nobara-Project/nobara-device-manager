@@ -1,6 +1,6 @@
 {
-    "application_name": "PikaOS Gestor de Dispositivos",
-    "developer_name": "Cosmo",
+    "application_name": "PikaOS Gestão de Dispositivos",
+    "developer_name": "Desenvolvedor",
     "banner_text_no_internet": "Aviso: Sem conexão com a internet!",
     "error_dialog_ok_label": "Ok",
     "pci_devices": "Dispositivos PCI",
