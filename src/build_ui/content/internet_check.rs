@@ -15,12 +15,22 @@ where
                 std::thread::sleep(std::time::Duration::from_secs(60));
             }
 
-            let check_internet_connection_cli = Command::new("ping")
-                .arg("iso.pika-os.com")
-                .arg("-c 1")
+            let check_internet_connection_cli = Command::new("nmcli")
+                .args(&["networking", "connectivity", "check"])
                 .output()
                 .expect("failed to execute process");
-            if check_internet_connection_cli.status.success() {
+
+            let connectivity_status = if check_internet_connection_cli.status.success() {
+                String::from_utf8_lossy(&check_internet_connection_cli.stdout)
+                    .trim()
+                    .to_string()
+            } else {
+                String::from("unknown")
+            };
+
+            let is_connected = matches!(connectivity_status.as_str(), "full" | "limited" | "portal");
+
+            if is_connected {
                 sender
                     .send_blocking(true)
                     .expect("The channel needs to be open.");
