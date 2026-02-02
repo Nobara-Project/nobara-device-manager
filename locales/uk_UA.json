@@ -46,7 +46,7 @@
     "status_no": "Ні",
     "device_status_active_enabled": "Активний та увімкнений",
     "device_status_active_disabled": "Активний, але вимкнений",
-    "device_status_inactive_enabled": "Неактивний, але ввімкнений",
+    "device_status_inactive_enabled": "Неактивний, але увімкнений",
     "device_status_inactive_disabled": "Неактивний і вимкнений",
     "pci_download_starting": "Завантаження бази даних профілів PCI.",
     "pci_download_successful": "Базу даних PCI-профілів успішно завантажено, йде завантаження...",
