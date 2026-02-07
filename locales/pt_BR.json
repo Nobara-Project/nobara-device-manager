@@ -11,7 +11,7 @@
     "profile_remove_button_label": "Remover",
     "profile_remove_button_tooltip_text": "Remover este perfil",
     "profile_install_dialog_heading": "Instalação de Perfil",
-    "profile_install_dialog_body_successful": "Instalção de perfil com sucesso!",
+    "profile_install_dialog_body_successful": "Perfil instalado com sucesso!",
     "profile_install_dialog_body_failed": "Intalação de perfil falhou!",
     "profile_install_dialog_ok_label": "Ok",
     "profile_install_dialog_reboot_label": "Reiniciar",
