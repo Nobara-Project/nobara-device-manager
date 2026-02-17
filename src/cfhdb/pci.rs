@@ -7,6 +7,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[derive(Clone)]
 pub struct PreCheckedPciDevice {
     pub device: CfhdbPciDevice,
     pub profiles: Vec<Arc<PreCheckedPciProfile>>,

@@ -1,26 +1,28 @@
+use std::{rc::Rc, sync::Arc};
+
+use adw::prelude::*;
+use adw::{Banner, BreakpointCondition};
+use gio::SimpleAction;
+use gtk::glib::{self, clone};
+use gtk::*;
+use gtk::{Align, StackTransitionType, ToggleButton};
+
 use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
-use crate::config::{APP_GIT, APP_ICON, VERSION};
-use crate::ChannelMsg;
-use adw::prelude::*;
-use adw::*;
-use gtk::glib::{clone, MainContext};
-use gtk::{Align, Orientation, PolicyType, Stack, StackTransitionType, ToggleButton};
-use pci::create_pci_class;
-use std::io::BufReader;
-use std::io::{BufRead, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::process::Command;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::thread;
-use usb::create_usb_class;
-use users::get_current_username;
 
-use super::color_badge::ColorBadge;
-
+mod all_profile_dialog;
+mod internet_check;
+mod main_content_content;
+mod main_content_sidebar;
 mod pci;
 mod usb;
+
+use all_profile_dialog::all_profile_dialog;
+use internet_check::internet_check_loop;
+use main_content_content::{error_dialog, main_content_content};
+use main_content_sidebar::main_content_sidebar;
+use pci::create_pci_class;
+use usb::create_usb_class;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
@@ -29,12 +31,15 @@ pub fn main_content(
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
 ) -> adw::OverlaySplitView {
+    // Start timing the UI building process
+    let ui_start = std::time::Instant::now();
+
     let theme_changed_action = gio::SimpleAction::new("theme_changed", None);
-    theme_changed_thread(&theme_changed_action);
+
     let window_breakpoint = adw::Breakpoint::new(BreakpointCondition::new_length(
-        BreakpointConditionLengthType::MaxWidth,
+        adw::BreakpointConditionLengthType::MaxWidth,
         900.0,
-        LengthUnit::Sp,
+        adw::LengthUnit::Sp,
     ));
 
     let main_content_overlay_split_view = adw::OverlaySplitView::builder()
@@ -54,45 +59,92 @@ pub fn main_content(
         .tooltip_text(t!("all_profiles_button_label"))
         .build();
 
-    main_content_overlay_split_view.set_content(Some(&main_content_content(
-        &window,
-        &window_banner,
-        &window_stack,
-        &main_content_overlay_split_view,
-        &window_breakpoint,
-        all_profiles_button.clone()
-    )));
+    // Create a proper toggle button for the sidebar
+    let sidebar_toggle = ToggleButton::builder()
+        .icon_name("sidebar-show-symbolic")
+        .tooltip_text(t!("toggle_sidebar"))
+        .active(true)
+        .build();
+    
+    // Connect the toggle button to the sidebar's collapsed state
+    sidebar_toggle.connect_toggled(clone!(
+        #[weak]
+        main_content_overlay_split_view,
+        move |toggle| {
+            main_content_overlay_split_view.set_show_sidebar(toggle.is_active());
+        }
+    ));
+    
+    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
 
     let mut is_first = true;
     let mut pci_buttons = vec![];
     let mut usb_buttons = vec![];
-    let null_toggle_sidebar = ToggleButton::default();
 
-    let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
-
-    {
-        let pci_profiles_rc = Rc::new(pci_profiles);
-        let usb_profiles_rc = Rc::new(usb_profiles);
-        let dialog = all_profile_dialog(window.clone(), &update_device_status_action, &theme_changed_action, &pci_profiles_rc, &usb_profiles_rc);
-        all_profiles_button.connect_clicked(clone!(#[strong] window, #[strong] dialog, move |_| {
+    let pci_profiles_rc = Rc::new(pci_profiles);
+    let usb_profiles_rc = Rc::new(usb_profiles);
+    let dialog = all_profile_dialog(
+        window.clone(),
+        &update_device_status_action,
+        &theme_changed_action,
+        &pci_profiles_rc,
+        &usb_profiles_rc,
+    );
+    all_profiles_button.connect_clicked(clone!(
+        #[strong]
+        window,
+        #[strong]
+        dialog,
+        move |_| {
             dialog.present(Some(&window));
-        }));
-    }
+        }
+    ));
 
+    theme_changed_thread(&theme_changed_action);
+
+    // Create placeholder pages for each class
     for (class, devices) in hashmap_pci {
         let class = format!("pci_class_name_{}", class);
         let class_i18n = t!(class).to_string();
-        window_stack.add_titled(
-            &create_pci_class(
-                &window,
-                &devices,
-                &class_i18n,
-                &theme_changed_action,
-                &update_device_status_action,
-            ),
-            Some(&class),
-            &class_i18n,
-        );
+
+        // Create a placeholder page with a loading spinner
+        let placeholder = create_placeholder_page(&class_i18n);
+
+        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        // Store the devices for lazy loading
+        let devices_clone = devices.clone();
+        let window_clone = window.clone();
+        let theme_changed_action_clone = theme_changed_action.clone();
+        let update_device_status_action_clone = update_device_status_action.clone();
+        let class_i18n_clone = class_i18n.clone();
+
+        // Connect to the "map" signal to load content when page becomes visible
+        placeholder.connect_map(move |placeholder| {
+            // Check if this page has already been loaded
+            if let Some(child) = placeholder.first_child() {
+                if child.widget_name() == "content_loaded" {
+                    return;
+                }
+            }
+
+            // Create the actual content
+            let content = create_pci_class(
+                &window_clone,
+                &devices_clone,
+                &class_i18n_clone,
+                &theme_changed_action_clone,
+                &update_device_status_action_clone,
+            );
+            content.set_widget_name("content_loaded");
+
+            // Replace the placeholder with the actual content
+            while let Some(child) = placeholder.first_child() {
+                placeholder.remove(&child);
+            }
+            placeholder.append(&content);
+        });
+
         pci_buttons.push(custom_stack_selection_button(
             &window_stack,
             if is_first {
@@ -106,24 +158,52 @@ pub fn main_content(
             get_icon_for_class(&class)
                 .unwrap_or("dialog-question-symbolic")
                 .into(),
-            &null_toggle_sidebar,
+            &sidebar_toggle,
         ));
     }
 
     for (class, devices) in hashmap_usb {
         let class = format!("usb_class_name_{}", class);
         let class_i18n = t!(class).to_string();
-        window_stack.add_titled(
-            &create_usb_class(
-                &window,
-                &devices,
-                &class_i18n,
-                &theme_changed_action,
-                &update_device_status_action,
-            ),
-            Some(&class),
-            &class_i18n,
-        );
+
+        // Create a placeholder page with a loading spinner
+        let placeholder = create_placeholder_page(&class_i18n);
+
+        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+        // Store the devices for lazy loading
+        let devices_clone = devices.clone();
+        let window_clone = window.clone();
+        let theme_changed_action_clone = theme_changed_action.clone();
+        let update_device_status_action_clone = update_device_status_action.clone();
+        let class_i18n_clone = class_i18n.clone();
+
+        // Connect to the "map" signal to load content when page becomes visible
+        placeholder.connect_map(move |placeholder| {
+            // Check if this page has already been loaded
+            if let Some(child) = placeholder.first_child() {
+                if child.widget_name() == "content_loaded" {
+                    return;
+                }
+            }
+
+            // Create the actual content
+            let content = create_usb_class(
+                &window_clone,
+                &devices_clone,
+                &class_i18n_clone,
+                &theme_changed_action_clone,
+                &update_device_status_action_clone,
+            );
+            content.set_widget_name("content_loaded");
+
+            // Replace the placeholder with the actual content
+            while let Some(child) = placeholder.first_child() {
+                placeholder.remove(&child);
+            }
+            placeholder.append(&content);
+        });
+
         usb_buttons.push(custom_stack_selection_button(
             &window_stack,
             if is_first {
@@ -137,9 +217,19 @@ pub fn main_content(
             get_icon_for_class(&class)
                 .unwrap_or("dialog-question-symbolic")
                 .into(),
-            &null_toggle_sidebar,
+            &sidebar_toggle,
         ));
     }
+
+    main_content_overlay_split_view.set_content(Some(&main_content_content(
+        &window,
+        &window_banner,
+        &window_stack,
+        &main_content_overlay_split_view,
+        &window_breakpoint,
+        all_profiles_button.clone(),
+        sidebar_toggle.clone(),
+    )));
 
     main_content_overlay_split_view
         .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));
@@ -148,6 +238,12 @@ pub fn main_content(
         &main_content_overlay_split_view,
         "collapsed",
         Some(&true.to_value()),
+    );
+    
+    window_breakpoint.add_setter(
+        &sidebar_toggle,
+        "active",
+        Some(&false.to_value()),
     );
 
     window.add_breakpoint(window_breakpoint);
@@ -163,304 +259,78 @@ pub fn main_content(
 
     internet_check_loop(internet_check_closure);
 
+    // Print the time taken to build the UI
+    println!("[PERF] Initial UI building took: {:?}", ui_start.elapsed());
+
     main_content_overlay_split_view
 }
 
-fn main_content_sidebar(
-    pci_buttons: &Vec<ToggleButton>,
-    usb_buttons: &Vec<ToggleButton>,
-) -> adw::ToolbarView {
-    let main_content_sidebar_box = gtk::Box::builder()
+// Helper function to create a placeholder page with a loading spinner
+fn create_placeholder_page(title: &str) -> gtk::Box {
+    let box_container = gtk::Box::builder()
         .orientation(Orientation::Vertical)
+        .spacing(10)
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .margin_end(20)
+        .vexpand(true)
+        .hexpand(true)
         .build();
 
-    let main_content_sidebar_scrolled_window = gtk::ScrolledWindow::builder()
-        .child(&main_content_sidebar_box)
-        .propagate_natural_height(true)
-        .propagate_natural_width(true)
-        .hscrollbar_policy(PolicyType::Never)
+    let spinner = gtk::Spinner::builder()
+        .width_request(32)
+        .height_request(32)
+        .halign(Align::Center)
+        .valign(Align::Center)
+        .vexpand(true)
+        .build();
+    spinner.start();
+
+    let label = gtk::Label::builder()
+        .label(&format!("{} - {}", t!("loading"), title))
+        .halign(Align::Center)
         .build();
 
-    let main_content_sidebar_toolbar = ToolbarView::builder()
-        .content(&main_content_sidebar_scrolled_window)
-        .top_bar_style(ToolbarStyle::Flat)
-        .bottom_bar_style(ToolbarStyle::Flat)
-        .build();
+    box_container.append(&spinner);
+    box_container.append(&label);
 
-    main_content_sidebar_toolbar.add_top_bar(
-        &HeaderBar::builder()
-            .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
-            .show_title(true)
-            .build(),
-    );
-
-    let pci_label = gtk::Label::new(Some(&t!("pci_devices")));
-    let usb_label = gtk::Label::new(Some(&t!("usb_devices")));
-    main_content_sidebar_box.append(&pci_label);
-    for button in pci_buttons {
-        main_content_sidebar_box.append(button);
-    }
-    main_content_sidebar_box.append(
-        &gtk::Separator::builder()
-            .orientation(Orientation::Horizontal)
-            .build(),
-    );
-    main_content_sidebar_box.append(&usb_label);
-    for button in usb_buttons {
-        main_content_sidebar_box.append(button);
-    }
-
-    main_content_sidebar_toolbar
+    box_container
 }
 
-fn custom_stack_selection_button(
-    stack: &gtk::Stack,
-    active: bool,
-    name: String,
-    title: String,
-    icon_name: String,
-    null_toggle_button: &gtk::ToggleButton,
-) -> gtk::ToggleButton {
-    let button_content = adw::ButtonContent::builder()
-        .label(&title)
-        .icon_name(icon_name)
-        .halign(Align::Start)
-        .build();
-    let toggle_button = gtk::ToggleButton::builder()
-        .group(null_toggle_button)
-        .child(&button_content)
-        .active(active)
-        .margin_top(5)
-        .margin_bottom(5)
-        .margin_start(10)
-        .margin_end(10)
-        .valign(gtk::Align::Start)
-        .build();
-    toggle_button.add_css_class("flat");
-    toggle_button.connect_clicked(clone!(
-        #[weak]
-        stack,
-        move |toggle_button| {
-            if toggle_button.is_active() {
-                stack.set_visible_child_name(&name);
-            }
-        }
-    ));
-    toggle_button
-}
+fn theme_changed_thread(theme_changed_action: &SimpleAction) {
+    let (theme_change_sender, theme_change_receiver) = async_channel::unbounded();
+    let theme_change_sender_clone = theme_change_sender.clone();
 
-fn main_content_content(
-    window: &adw::ApplicationWindow,
-    window_banner: &adw::Banner,
-    stack: &Stack,
-    main_content_overlay_split_view: &adw::OverlaySplitView,
-    window_breakpoint: &adw::Breakpoint,
-    all_profiles_button: gtk::Button,
-) -> adw::ToolbarView {
-    let window_headerbar = HeaderBar::builder()
-        .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
-        .show_title(false)
-        .build();
-    let window_toolbar = ToolbarView::builder()
-        .content(stack)
-        .top_bar_style(ToolbarStyle::Flat)
-        .bottom_bar_style(ToolbarStyle::Flat)
-        .build();
-    let sidebar_toggle_button = gtk::ToggleButton::builder()
-        .icon_name("view-right-pane-symbolic")
-        .visible(false)
-        .build();
-    let _sidebar_toggle_button_binding = main_content_overlay_split_view
-        .bind_property("show_sidebar", &sidebar_toggle_button, "active")
-        .sync_create()
-        .bidirectional()
-        .build();
-
-    window_headerbar.pack_end(&all_profiles_button);
-    window_toolbar.add_top_bar(&window_headerbar);
-    window_toolbar.add_top_bar(&window_banner.clone());
-    window_breakpoint.add_setter(&sidebar_toggle_button, "visible", Some(&true.to_value()));
-    window_breakpoint.add_setter(&window_headerbar, "show_title", Some(&true.to_value()));
-    window_headerbar.pack_end(&sidebar_toggle_button);
-    credits_window(&window, &window_headerbar);
-
-    window_toolbar
-}
-
-fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::HeaderBar) {
-    let credits_button = gtk::Button::builder()
-        .icon_name("dialog-information-symbolic")
-        .tooltip_text(t!("credits_button_label"))
-        .build();
-
-    let credits_window = adw::AboutDialog::builder()
-        .application_icon(APP_ICON)
-        .application_name(t!("application_name"))
-        .version(VERSION)
-        .developer_name(t!("developer_name"))
-        .license_type(gtk::License::Mpl20)
-        .issue_url(APP_GIT.to_owned() + "/issues")
-        .build();
-
-    window_headerbar.pack_end(&credits_button);
-    credits_button.connect_clicked(clone!(
-        #[strong]
-        window,
-        move |_| credits_window.present(Some(&window))
-    ));
-}
-fn internet_check_loop<F>(closure: F)
-where
-    F: FnOnce(bool) + 'static + Clone, // Closure takes `rx` as an argument
-{
-    let (sender, receiver) = async_channel::unbounded();
-
-    thread::spawn(move || {
-        let mut last_result = false;
+    std::thread::spawn(move || {
+        let mut last_theme = "".to_string();
         loop {
-            if last_result == true {
-                std::thread::sleep(std::time::Duration::from_secs(60));
+            let current_theme = match std::fs::read_to_string("/tmp/cfhdb/theme") {
+                Ok(t) => t,
+                Err(_) => "".to_string(),
+            };
+            if current_theme != last_theme {
+                last_theme = current_theme;
+                let _ = theme_change_sender_clone.send_blocking(());
             }
-
-            let check_internet_connection_cli = Command::new("ping")
-                .arg("iso.pika-os.com")
-                .arg("-c 1")
-                .output()
-                .expect("failed to execute process");
-            if check_internet_connection_cli.status.success() {
-                sender
-                    .send_blocking(true)
-                    .expect("The channel needs to be open.");
-                last_result = true
-            } else {
-                sender
-                    .send_blocking(false)
-                    .expect("The channel needs to be open.");
-                last_result = false
-            }
+            std::thread::sleep(std::time::Duration::from_millis(1000));
         }
     });
 
-    let main_context = MainContext::default();
-
-    main_context.spawn_local(async move {
-        while let Ok(state) = receiver.recv().await {
-            let closure = closure.clone();
-            closure(state);
-        }
-    });
-}
-
-fn theme_changed_thread(theme_changed_action: &gio::SimpleAction) {
-    let (gsettings_change_sender, gsettings_change_receiver) = async_channel::unbounded();
-    let gsettings_change_sender_clone0 = gsettings_change_sender.clone();
-
-    thread::spawn(move || {
-        let context = glib::MainContext::default();
-        let main_loop = glib::MainLoop::new(Some(&context), false);
-        let gsettings = gtk::gio::Settings::new("org.gnome.desktop.interface");
-        gsettings.connect_changed(
-            Some("accent-color"),
-            clone!(
-                #[strong]
-                gsettings_change_sender_clone0,
-                move |_, _| {
-                    let gsettings_change_sender_clone0 = gsettings_change_sender_clone0.clone();
-                    glib::timeout_add_seconds_local(5, move || {
-                        gsettings_change_sender_clone0.send_blocking(()).unwrap();
-                        glib::ControlFlow::Break
-                    });
-                }
-            ),
-        );
-        main_loop.run()
-    });
-
-    let gsettings_changed_context = MainContext::default();
+    let theme_changed_context = glib::MainContext::default();
     // The main loop executes the asynchronous block
-    gsettings_changed_context.spawn_local(clone!(
+    theme_changed_context.spawn_local(clone!(
         #[strong]
         theme_changed_action,
         async move {
-            while let Ok(()) = gsettings_change_receiver.recv().await {
+            while let Ok(()) = theme_change_receiver.recv().await {
                 theme_changed_action.activate(None);
             }
         }
     ));
 }
 
-pub fn exec_duct_with_live_channel_stdout(
-    //sender: async_channel::Sender<String>,
-    sender: &async_channel::Sender<ChannelMsg>,
-    duct_expr: duct::Expression,
-) -> Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>> {
-    let (pipe_reader, pipe_writer) = os_pipe::pipe()?;
-    let child = duct_expr
-        .stderr_to_stdout()
-        .stdout_file(pipe_writer)
-        .start()?;
-    for line in BufReader::new(pipe_reader).lines() {
-        sender
-            .send_blocking(ChannelMsg::OutputLine(line?))
-            .expect("Channel needs to be opened.")
-    }
-    child.wait()?;
-
-    Ok(())
-}
-
-pub fn error_dialog(window: ApplicationWindow, heading: &str, error: &str) {
-    let error_dialog = adw::AlertDialog::builder()
-        .body(error)
-        .width_request(400)
-        .height_request(200)
-        .heading(heading)
-        .build();
-    error_dialog.add_response("error_dialog_ok", &t!("error_dialog_ok_label").to_string());
-    error_dialog.present(Some(&window));
-}
-
-pub fn run_in_lock_script(log_loop_sender: &async_channel::Sender<ChannelMsg>, script: &str) {
-    let file_path = "/var/cache/cfhdb/script_lock.sh";
-    let file_fs_path = std::path::Path::new(file_path);
-    if file_fs_path.exists() {
-        std::fs::remove_file(file_fs_path).unwrap();
-    }
-    {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(file_path)
-            .expect(&(file_path.to_string() + "cannot be read"));
-        file.write_all(script.as_bytes())
-            .expect(&(file_path.to_string() + "cannot be written to"));
-        let mut perms = file
-            .metadata()
-            .expect(&(file_path.to_string() + "cannot be read"))
-            .permissions();
-        perms.set_mode(0o777);
-        std::fs::set_permissions(file_path, perms)
-            .expect(&(file_path.to_string() + "cannot be written to"));
-    }
-    let final_cmd = if get_current_username().unwrap() == "root" {
-        duct::cmd!(file_path)
-    } else {
-        duct::cmd!("pkexec", file_path)
-    };
-    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
-        Ok(_) => {
-            log_loop_sender
-                .send_blocking(ChannelMsg::SuccessMsg)
-                .unwrap();
-        }
-        Err(_) => {
-            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
-        }
-    }
-}
-
-pub fn get_icon_for_class(class: &str) -> Option<&str> {
+pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
     match class {
         // pci_classes
         "pci_class_name_0000" => Some("dialog-question-symbolic"),
@@ -612,284 +482,139 @@ pub fn get_icon_for_class(class: &str) -> Option<&str> {
     }
 }
 
-fn all_profile_dialog(window: ApplicationWindow, update_device_status_action: &gio::SimpleAction, theme_changed_action: &gio::SimpleAction, pci_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>, usb_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>) -> adw::AlertDialog {
-    let boxedlist = gtk::ListBox::builder()
-        .vexpand(true)
+fn custom_stack_selection_button(
+    stack: &gtk::Stack,
+    active: bool,
+    name: String,
+    title: String,
+    icon: String,
+    toggle_sidebar: &gtk::ToggleButton,
+) -> gtk::Button {
+    // Create a box to hold the icon and label with proper spacing
+    let button_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    
+    // Add the icon
+    let icon_widget = gtk::Image::builder()
+        .icon_name(&icon)
+        .pixel_size(16)
+        .build();
+    
+    // Add the label
+    let label = gtk::Label::builder()
+        .label(&title)
+        .halign(gtk::Align::Start)
         .hexpand(true)
-        .margin_bottom(20)
-        .margin_top(20)
-        .margin_start(10)
-        .margin_end(20)
         .build();
-    boxedlist.add_css_class("boxed-list");
-    let scroll = gtk::ScrolledWindow::builder()
-        .width_request(600)
-        .height_request(400)
-        .propagate_natural_height(true)
-        .propagate_natural_width(true)
-        .vexpand(true)
-        .hexpand(true)
-        .child(&boxedlist)
+    
+    // Add them to the box
+    button_box.append(&icon_widget);
+    button_box.append(&label);
+    
+    // Create the button with the box as its child
+    let button = gtk::Button::builder()
+        .child(&button_box)
+        .tooltip_text(&title)
+        .margin_top(4)
+        .margin_bottom(4)
+        .margin_start(8)
+        .margin_end(8)
         .build();
-    let dialog = adw::AlertDialog::builder()
-        .extra_child(&scroll)
-        .heading(t!(format!("all_profile_dialog_heading")))
-        .build();
-    let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
-    let pci_profiles_clone0 = pci_profiles.clone();
-    let pci_profiles_clone1: Vec<Arc<PreCheckedPciProfile>> = pci_profiles.iter().map(|f| f.clone()).collect();
-    for profile in pci_profiles_clone1 {
-        let profile_content = profile.profile();
-        let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
-            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
-            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
-        );
-        let profile_expander_row = adw::ExpanderRow::new();
-        let profile_icon = gtk::Image::builder()
-            .icon_name(&profile_content.icon_name)
-            .pixel_size(32)
-            .build();
-        let profile_status_icon = gtk::Image::builder()
-            .icon_name("emblem-default")
-            .pixel_size(24)
-            .visible(false)
-            .tooltip_text(t!("profile_status_icon_tooltip_text"))
-            .build();
-        let profile_content_row = adw::ActionRow::builder().build();
-        let profile_install_button = gtk::Button::builder()
-            .margin_start(5)
-            .margin_top(5)
-            .margin_bottom(5)
-            .valign(gtk::Align::Center)
-            .label(t!("profile_install_button_label"))
-            .tooltip_text(t!("profile_install_button_tooltip_text"))
-            .sensitive(false)
-            .build();
-        profile_install_button.add_css_class("suggested-action");
-        let profile_remove_button = gtk::Button::builder()
-            .margin_end(5)
-            .margin_top(5)
-            .margin_bottom(5)
-            .valign(gtk::Align::Center)
-            .label(t!("profile_remove_button_label"))
-            .tooltip_text(t!("profile_remove_button_tooltip_text"))
-            .sensitive(false)
-            .build();
-        let profile_action_box = gtk::Box::builder().homogeneous(true).build();
-        profile_remove_button.add_css_class("destructive-action");
-        profile_expander_row.add_prefix(&profile_icon);
-        profile_expander_row.add_suffix(&profile_status_icon);
-        profile_expander_row.set_title(&profile_content.i18n_desc);
-        profile_expander_row.set_subtitle(&profile_content.codename);
-        //
-        let color_badge_experimental = ColorBadge::new();
-        color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
-        if profile_content.experimental {
-            color_badge_experimental.set_label1(t!("status_yes"));
-            color_badge_experimental.set_css_style("background-red-bg");
-        } else {
-            color_badge_experimental.set_label1(t!("status_no"));
-            color_badge_experimental.set_css_style("background-accent-bg");
+    
+    // Add CSS class for styling
+    button.add_css_class("flat");
+    
+    let name_clone = name.clone();
+    button.connect_clicked(clone!(
+        #[weak]
+        stack,
+        #[weak]
+        toggle_sidebar,
+        move |_| {
+            stack.set_visible_child_name(&name_clone);
+            toggle_sidebar.set_active(false);
         }
-        color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
-        color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
-        color_badge_experimental.set_theme_changed_action(theme_changed_action);
-        let color_badge_license = ColorBadge::new();
-        color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
-        color_badge_license.set_label1(profile_content.license.clone());
-        color_badge_license.set_css_style("background-accent-bg");
-        color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
-        color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
-        color_badge_license.set_theme_changed_action(theme_changed_action);
-        let badges_warp_box = gtk::Box::new(Orientation::Vertical, 3);
-        badges_warp_box.append(&color_badge_license);
-        badges_warp_box.append(&color_badge_experimental);
-        profile_content_row.add_prefix(&badges_warp_box);
-        profile_action_box.append(&profile_remove_button);
-        profile_action_box.append(&profile_install_button);
-        profile_content_row.add_suffix(&profile_action_box);
-        profile_expander_row.add_row(&profile_content_row);
-        rows_size_group.add_widget(&profile_action_box);
-        //
-        profile_install_button.connect_clicked(clone!(
-            #[strong]
-            window,
-            #[strong]
-            update_device_status_action,
-            #[strong]
-            profile,
-            #[strong]
-            pci_profiles_clone0,
-            move |_| {
-                pci::profile_modify(
-                    window.clone(),
-                    &update_device_status_action,
-                    &profile,
-                    &pci_profiles_clone0,
-                    "install",
-                );
-            }
-        ));
-        profile_remove_button.connect_clicked(clone!(
-            #[strong]
-            window,
-            #[strong]
-            update_device_status_action,
-            #[strong]
-            profile,
-            #[strong]
-            pci_profiles_clone0,
-            move |_| {
-                pci::profile_modify(
-                    window.clone(),
-                    &update_device_status_action,
-                    &profile,
-                    &pci_profiles_clone0,
-                    "install",
-                );
-            }
-        ));
-        //
-        boxedlist.append(&profile_expander_row);
-        //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
-            let profile_status = profile.installed();
-            profile_install_button.set_sensitive(!profile_status);
-            if profile_content.removable {
-                profile_remove_button.set_sensitive(profile_status);
-            } else {
-                profile_remove_button.set_sensitive(false);
-            }
-            profile_status_icon.set_visible(profile_status);
-        }));
+    ));
+    
+    if active {
+        stack.set_visible_child_name(&name);
+        button.add_css_class("sidebar-active-button");
     }
-    //
-    let usb_profiles_clone0 = usb_profiles.clone();
-    let usb_profiles_clone1: Vec<Arc<PreCheckedUsbProfile>> = usb_profiles.iter().map(|f| f.clone()).collect();
-    for profile in usb_profiles_clone1 {
-        let profile_content = profile.profile();
-        let (profiles_color_badges_size_group0, profiles_color_badges_size_group1) = (
-            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
-            gtk::SizeGroup::new(gtk::SizeGroupMode::Both),
-        );
-        let profile_expander_row = adw::ExpanderRow::new();
-        let profile_icon = gtk::Image::builder()
-            .icon_name(&profile_content.icon_name)
-            .pixel_size(32)
-            .build();
-        let profile_status_icon = gtk::Image::builder()
-            .icon_name("emblem-default")
-            .pixel_size(24)
-            .visible(false)
-            .tooltip_text(t!("profile_status_icon_tooltip_text"))
-            .build();
-        let profile_content_row = adw::ActionRow::builder().build();
-        let profile_install_button = gtk::Button::builder()
-            .margin_start(5)
-            .margin_top(5)
-            .margin_bottom(5)
-            .valign(gtk::Align::Center)
-            .label(t!("profile_install_button_label"))
-            .tooltip_text(t!("profile_install_button_tooltip_text"))
-            .sensitive(false)
-            .build();
-        profile_install_button.add_css_class("suggested-action");
-        let profile_remove_button = gtk::Button::builder()
-            .margin_end(5)
-            .margin_top(5)
-            .margin_bottom(5)
-            .valign(gtk::Align::Center)
-            .label(t!("profile_remove_button_label"))
-            .tooltip_text(t!("profile_remove_button_tooltip_text"))
-            .sensitive(false)
-            .build();
-        let profile_action_box = gtk::Box::builder().homogeneous(true).build();
-        profile_remove_button.add_css_class("destructive-action");
-        profile_expander_row.add_prefix(&profile_icon);
-        profile_expander_row.add_suffix(&profile_status_icon);
-        profile_expander_row.set_title(&profile_content.i18n_desc);
-        profile_expander_row.set_subtitle(&profile_content.codename);
-        //
-        let color_badge_experimental = ColorBadge::new();
-        color_badge_experimental.set_label0(textwrap::fill(&t!("profile_experimental"), 10));
-        if profile_content.experimental {
-            color_badge_experimental.set_label1(t!("status_yes"));
-            color_badge_experimental.set_css_style("background-red-bg");
-        } else {
-            color_badge_experimental.set_label1(t!("status_no"));
-            color_badge_experimental.set_css_style("background-accent-bg");
+    
+    button
+}
+
+pub fn run_in_lock_script(
+    log_loop_sender: &async_channel::Sender<crate::ChannelMsg>,
+    script: &str,
+) {
+    use crate::ChannelMsg;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use users::get_current_username;
+
+    let file_path = "/var/cache/cfhdb/script_lock.sh";
+    let file_fs_path = std::path::Path::new(file_path);
+    if file_fs_path.exists() {
+        std::fs::remove_file(file_fs_path).unwrap();
+    }
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(file_path)
+            .expect(&(file_path.to_string() + "cannot be read"));
+        file.write_all(script.as_bytes())
+            .expect(&(file_path.to_string() + "cannot be written to"));
+        let mut perms = file
+            .metadata()
+            .expect(&(file_path.to_string() + "cannot be read"))
+            .permissions();
+        perms.set_mode(0o777);
+        std::fs::set_permissions(file_path, perms)
+            .expect(&(file_path.to_string() + "cannot be written to"));
+    }
+    let username = get_current_username().unwrap();
+    let final_cmd = if username == "root" {
+        duct::cmd!(file_path)
+    } else {
+        duct::cmd!("pkexec", file_path)
+    };
+
+    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
+        Ok(_) => {
+            log_loop_sender
+                .send_blocking(ChannelMsg::SuccessMsg)
+                .unwrap();
         }
-        color_badge_experimental.set_group_size0(&profiles_color_badges_size_group0);
-        color_badge_experimental.set_group_size1(&profiles_color_badges_size_group1);
-        color_badge_experimental.set_theme_changed_action(theme_changed_action);
-        let color_badge_license = ColorBadge::new();
-        color_badge_license.set_label0(textwrap::fill(&t!("profile_license"), 10));
-        color_badge_license.set_label1(profile_content.license.clone());
-        color_badge_license.set_css_style("background-accent-bg");
-        color_badge_license.set_group_size0(&profiles_color_badges_size_group0);
-        color_badge_license.set_group_size1(&profiles_color_badges_size_group1);
-        color_badge_license.set_theme_changed_action(theme_changed_action);
-        let badges_warp_box = gtk::Box::new(Orientation::Vertical, 3);
-        badges_warp_box.append(&color_badge_license);
-        badges_warp_box.append(&color_badge_experimental);
-        profile_content_row.add_prefix(&badges_warp_box);
-        profile_action_box.append(&profile_remove_button);
-        profile_action_box.append(&profile_install_button);
-        profile_content_row.add_suffix(&profile_action_box);
-        profile_expander_row.add_row(&profile_content_row);
-        rows_size_group.add_widget(&profile_action_box);
-        //
-        profile_install_button.connect_clicked(clone!(
-            #[strong]
-            window,
-            #[strong]
-            update_device_status_action,
-            #[strong]
-            profile,
-            #[strong]
-            usb_profiles_clone0,
-            move |_| {
-                usb::profile_modify(
-                    window.clone(),
-                    &update_device_status_action,
-                    &profile,
-                    &usb_profiles_clone0,
-                    "install",
-                );
-            }
-        ));
-        profile_remove_button.connect_clicked(clone!(
-            #[strong]
-            window,
-            #[strong]
-            update_device_status_action,
-            #[strong]
-            profile,
-            #[strong]
-            usb_profiles_clone0,
-            move |_| {
-                usb::profile_modify(
-                    window.clone(),
-                    &update_device_status_action,
-                    &profile,
-                    &usb_profiles_clone0,
-                    "install",
-                );
-            }
-        ));
-        //
-        boxedlist.append(&profile_expander_row);
-        //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
-            let profile_status = profile.installed();
-            profile_install_button.set_sensitive(!profile_status);
-            if profile_content.removable {
-                profile_remove_button.set_sensitive(profile_status);
-            } else {
-                profile_remove_button.set_sensitive(false);
-            }
-            profile_status_icon.set_visible(profile_status);
-        }));
+        Err(_) => {
+            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
+        }
     }
-    dialog
+}
+
+pub fn exec_duct_with_live_channel_stdout(
+    sender: &async_channel::Sender<crate::ChannelMsg>,
+    duct_expr: duct::Expression,
+) -> Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>> {
+    use crate::ChannelMsg;
+    use std::io::BufRead;
+
+    let (pipe_reader, pipe_writer) = os_pipe::pipe()?;
+    let child = duct_expr
+        .stderr_to_stdout()
+        .stdout_file(pipe_writer)
+        .start()?;
+    for line in std::io::BufReader::new(pipe_reader).lines() {
+        sender
+            .send_blocking(ChannelMsg::OutputLine(line?))
+            .expect("Channel needs to be opened.")
+    }
+
+    child.wait()?;
+
+    Ok(())
 }

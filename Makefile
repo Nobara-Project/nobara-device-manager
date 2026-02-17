@@ -11,35 +11,35 @@ build_debug:
 
 install_no_build:
 	mkdir -p $(DESTDIR)/usr/bin/
-	cp -vf target/release/pika-device-manager $(DESTDIR)/usr/bin/
-	chmod 755 $(DESTDIR)/usr/bin/pika-device-manager
+	cp -vf target/release/nobara-driver-manager $(DESTDIR)/usr/bin/
+	chmod 755 $(DESTDIR)/usr/bin/nobara-driver-manager
 	mkdir -p $(DESTDIR)/usr/share/glib-2.0/schemas/
 	cp data/*.xml $(DESTDIR)/usr/share/glib-2.0/schemas/
 	mkdir -p $(DESTDIR)/usr/share/applications
 	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/scalable/apps
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.desktop  $(DESTDIR)/usr/share/applications/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.desktop  $(DESTDIR)/usr/share/applications/
 
 install_no_build_debug:
 	mkdir -p $(DESTDIR)/usr/bin/
-	cp -vf target/debug/pika-device-manager $(DESTDIR)/usr/bin/
-	chmod 755 $(DESTDIR)/usr/bin/pika-device-manager
+	cp -vf target/debug/nobara-driver-manager $(DESTDIR)/usr/bin/
+	chmod 755 $(DESTDIR)/usr/bin/nobara-driver-manager
 	mkdir -p $(DESTDIR)/usr/share/glib-2.0/schemas/
 	cp data/*.xml $(DESTDIR)/usr/share/glib-2.0/schemas/
 	mkdir -p $(DESTDIR)/usr/share/applications
 	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/scalable/apps
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.desktop  $(DESTDIR)/usr/share/applications/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.desktop  $(DESTDIR)/usr/share/applications/
 
 install:
 	mkdir -p $(DESTDIR)/usr/bin/
 	cargo fetch
 	cargo build --release
-	cp -vf target/release/pika-device-manager $(DESTDIR)/usr/bin/
-	chmod 755 $(DESTDIR)/usr/bin/pika-device-manager
+	cp -vf target/release/nobara-driver-manager $(DESTDIR)/usr/bin/
+	chmod 755 $(DESTDIR)/usr/bin/nobara-driver-manager
 	mkdir -p $(DESTDIR)/usr/share/glib-2.0/schemas/
 	cp data/*.xml $(DESTDIR)/usr/share/glib-2.0/schemas/
 	mkdir -p $(DESTDIR)/usr/share/applications
 	mkdir -p $(DESTDIR)/usr/share/icons/hicolor/scalable/apps
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
-	cp -vf data/com.github.pikaos-linux.pikadevicemanager.desktop  $(DESTDIR)/usr/share/applications/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.svg $(DESTDIR)/usr/share/icons/hicolor/scalable/apps/
+	cp -vf data/com.github.nobara-project.nobaradrivermanager.desktop  $(DESTDIR)/usr/share/applications/

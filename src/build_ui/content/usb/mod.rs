@@ -27,6 +27,12 @@ pub fn create_usb_class(
     theme_changed_action: &gio::SimpleAction,
     update_device_status_action: &gio::SimpleAction,
 ) -> ScrolledWindow {
+    // Update all profiles' installation status before creating the UI
+    for device in devices {
+        for profile in &device.profiles {
+            profile.update_installed();
+        }
+    }
     let devices_list_row = gtk::ListBox::builder()
         .margin_top(20)
         .margin_bottom(20)
@@ -473,7 +479,7 @@ fn usb_device_page(
                     &update_device_status_action,
                     &profile,
                     &profiles_rc,
-                    "install",
+                    "remove",
                 );
             }
         ));

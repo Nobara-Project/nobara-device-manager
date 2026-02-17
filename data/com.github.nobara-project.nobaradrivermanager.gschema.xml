@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <schemalist>
-  <schema id="com.github.pikaos-linux.pikadevicemanager" path="/com/github/pikaos-linux/pikadevicemanager/">
+  <schema id="com.github.nobara-project.nobaradrivermanager" path="/com/github/nobara-project/nobaradrivermanager/">
     <key name="window-width" type="i">
       <default>1400</default>
       <summary>Default window width</summary>
