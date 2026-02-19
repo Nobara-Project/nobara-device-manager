@@ -11,6 +11,8 @@ pub const APP_GIT: &str = "https://git.nobara-os.com/custom-gui-packages/nobara-
 pub struct ProfileUrlConfig {
     pci_json_url: String,
     usb_json_url: String,
+    dmi_json_url: String,
+    bt_json_url: String,
 }
 
 pub fn distro_package_manager(opreation: &str, package_list: &str) -> String {
@@ -20,6 +22,8 @@ pub fn distro_package_manager(opreation: &str, package_list: &str) -> String {
 lazy_static::lazy_static! {
     pub static ref PCI_PROFILE_JSON_URL: String = get_profile_url_config().pci_json_url;
     pub static ref USB_PROFILE_JSON_URL: String = get_profile_url_config().usb_json_url;
+    pub static ref DMI_PROFILE_JSON_URL: String = get_profile_url_config().dmi_json_url;
+    pub static ref BT_PROFILE_JSON_URL: String = get_profile_url_config().bt_json_url;
 }
 
 fn get_profile_url_config() -> ProfileUrlConfig {

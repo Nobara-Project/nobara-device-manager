@@ -1,5 +1,5 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{glib::clone, Stack, Button, ToggleButton};
+use gtk::{glib::clone, Button, Stack, ToggleButton};
 
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 
@@ -11,6 +11,7 @@ pub fn main_content_content(
     window_breakpoint: &adw::Breakpoint,
     all_profiles_button: Button,
     sidebar_toggle_button: ToggleButton,
+    about_action: &gtk::gio::SimpleAction,
 ) -> adw::ToolbarView {
     let window_headerbar = HeaderBar::builder()
         .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
@@ -21,7 +22,7 @@ pub fn main_content_content(
         .top_bar_style(ToolbarStyle::Flat)
         .bottom_bar_style(ToolbarStyle::Flat)
         .build();
-    
+
     // Use the provided sidebar toggle button
     let _sidebar_toggle_button_binding = main_content_overlay_split_view
         .bind_property("show_sidebar", &sidebar_toggle_button, "active")
@@ -35,12 +36,16 @@ pub fn main_content_content(
     window_breakpoint.add_setter(&sidebar_toggle_button, "visible", Some(&true.to_value()));
     window_breakpoint.add_setter(&window_headerbar, "show_title", Some(&true.to_value()));
     window_headerbar.pack_end(&sidebar_toggle_button);
-    credits_window(&window, &window_headerbar);
+    credits_window(&window, &window_headerbar, &about_action);
 
     window_toolbar
 }
 
-fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::HeaderBar) {
+fn credits_window(
+    window: &adw::ApplicationWindow,
+    window_headerbar: &adw::HeaderBar,
+    about_action: &gtk::gio::SimpleAction,
+) {
     let credits_button = gtk::Button::builder()
         .icon_name("dialog-information-symbolic")
         .tooltip_text(t!("credits_button_label"))
@@ -59,7 +64,14 @@ fn credits_window(window: &adw::ApplicationWindow, window_headerbar: &adw::Heade
     credits_button.connect_clicked(clone!(
         #[strong]
         window,
+        #[strong]
+        credits_window,
         move |_| credits_window.present(Some(&window))
+    ));
+    about_action.connect_activate(clone!(
+        #[strong]
+        window,
+        move |_, _| credits_window.present(Some(&window))
     ));
 }
 

@@ -1,7 +1,10 @@
 mod config;
 
 use adw::{prelude::*, *};
-use cfhdb::{pci::{PreCheckedPciDevice, PreCheckedPciProfile}, usb::{PreCheckedUsbDevice, PreCheckedUsbProfile}};
+use cfhdb::{
+    pci::{PreCheckedPciDevice, PreCheckedPciProfile},
+    usb::{PreCheckedUsbDevice, PreCheckedUsbProfile},
+};
 use gdk::Display;
 use gtk::{CssProvider, STYLE_PROVIDER_PRIORITY_APPLICATION};
 use std::{env, sync::Arc};
@@ -14,10 +17,14 @@ pub enum ChannelMsg {
     SuccessMsg,
     UpdateMsg,
     SuccessMsgDeviceFetch(
-        Vec<(String, Vec<PreCheckedPciDevice>)>,
-        Vec<(String, Vec<PreCheckedUsbDevice>)>,
+        Option<Vec<(String, Vec<PreCheckedPciDevice>)>>,
+        Option<Vec<(String, Vec<PreCheckedUsbDevice>)>>,
+        PreCheckedDmiInfo,
+        Option<Vec<(String, Vec<PreCheckedBtDevice>)>>,
         Vec<Arc<PreCheckedPciProfile>>,
         Vec<Arc<PreCheckedUsbProfile>>,
+        Vec<Arc<PreCheckedDmiProfile>>,
+        Vec<Arc<PreCheckedBtProfile>>,
     ),
     FailMsg,
 }
@@ -26,7 +33,13 @@ pub enum ChannelMsg {
 mod build_ui;
 mod cfhdb;
 
-use crate::build_ui::build_ui;
+use crate::{
+    build_ui::build_ui,
+    cfhdb::{
+        bt::{PreCheckedBtDevice, PreCheckedBtProfile},
+        dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile},
+    },
+};
 
 // Init translations for current crate.
 #[macro_use]

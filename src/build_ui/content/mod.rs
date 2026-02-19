@@ -7,10 +7,16 @@ use gtk::glib::{self, clone};
 use gtk::*;
 use gtk::{Align, StackTransitionType, ToggleButton};
 
+use crate::build_ui::content::bt::create_bt_class;
+use crate::build_ui::content::dmi::create_dmi_class;
+use crate::cfhdb::bt::{PreCheckedBtDevice, PreCheckedBtProfile};
+use crate::cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile};
 use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
 
 mod all_profile_dialog;
+mod bt;
+mod dmi;
 mod internet_check;
 mod main_content_content;
 mod main_content_sidebar;
@@ -26,10 +32,16 @@ use usb::create_usb_class;
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
-    hashmap_pci: Vec<(String, Vec<PreCheckedPciDevice>)>,
-    hashmap_usb: Vec<(String, Vec<PreCheckedUsbDevice>)>,
+    hashmap_pci: Option<Vec<(String, Vec<PreCheckedPciDevice>)>>,
+    hashmap_usb: Option<Vec<(String, Vec<PreCheckedUsbDevice>)>>,
+    dmi_info: PreCheckedDmiInfo,
+    hashmap_bt: Option<Vec<(String, Vec<PreCheckedBtDevice>)>>,
     pci_profiles: Vec<Arc<PreCheckedPciProfile>>,
     usb_profiles: Vec<Arc<PreCheckedUsbProfile>>,
+    dmi_profiles: Vec<Arc<PreCheckedDmiProfile>>,
+    bt_profiles: Vec<Arc<PreCheckedBtProfile>>,
+    about_action: &gtk::gio::SimpleAction,
+    showallprofiles_action: &gtk::gio::SimpleAction,
 ) -> adw::OverlaySplitView {
     // Start timing the UI building process
     let ui_start = std::time::Instant::now();
@@ -65,7 +77,7 @@ pub fn main_content(
         .tooltip_text(t!("toggle_sidebar"))
         .active(true)
         .build();
-    
+
     // Connect the toggle button to the sidebar's collapsed state
     sidebar_toggle.connect_toggled(clone!(
         #[weak]
@@ -74,21 +86,25 @@ pub fn main_content(
             main_content_overlay_split_view.set_show_sidebar(toggle.is_active());
         }
     ));
-    
+
     let update_device_status_action = gio::SimpleAction::new("update_device_status", None);
 
-    let mut is_first = true;
-    let mut pci_buttons = vec![];
-    let mut usb_buttons = vec![];
+    let mut pci_rows = vec![];
+    let mut usb_rows = vec![];
+    let mut bt_rows = vec![];
 
+    let dmi_profiles_rc = Rc::new(dmi_profiles);
     let pci_profiles_rc = Rc::new(pci_profiles);
     let usb_profiles_rc = Rc::new(usb_profiles);
+    let bt_profiles_rc = Rc::new(bt_profiles);
     let dialog = all_profile_dialog(
         window.clone(),
         &update_device_status_action,
         &theme_changed_action,
+        &dmi_profiles_rc,
         &pci_profiles_rc,
         &usb_profiles_rc,
+        &bt_profiles_rc,
     );
     all_profiles_button.connect_clicked(clone!(
         #[strong]
@@ -99,126 +115,270 @@ pub fn main_content(
             dialog.present(Some(&window));
         }
     ));
+    showallprofiles_action.connect_activate(clone!(
+        #[strong]
+        all_profiles_button,
+        move |_, _| {
+            all_profiles_button.emit_clicked();
+        }
+    ));
 
     theme_changed_thread(&theme_changed_action);
 
-    // Create placeholder pages for each class
-    for (class, devices) in hashmap_pci {
-        let class = format!("pci_class_name_{}", class);
-        let class_i18n = t!(class).to_string();
+    // DMI placeholder
 
-        // Create a placeholder page with a loading spinner
-        let placeholder = create_placeholder_page(&class_i18n);
+    // Create a placeholder page with a loading spinner
+    let placeholder = create_placeholder_page(&t!("dmi_row_title"));
 
-        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+    window_stack.add_titled(&placeholder, Some("dmi"), &t!("dmi_row_title"));
 
-        // Store the devices for lazy loading
-        let devices_clone = devices.clone();
-        let window_clone = window.clone();
-        let theme_changed_action_clone = theme_changed_action.clone();
-        let update_device_status_action_clone = update_device_status_action.clone();
-        let class_i18n_clone = class_i18n.clone();
-
-        // Connect to the "map" signal to load content when page becomes visible
-        placeholder.connect_map(move |placeholder| {
-            // Check if this page has already been loaded
-            if let Some(child) = placeholder.first_child() {
-                if child.widget_name() == "content_loaded" {
-                    return;
-                }
-            }
-
-            // Create the actual content
-            let content = create_pci_class(
-                &window_clone,
-                &devices_clone,
-                &class_i18n_clone,
-                &theme_changed_action_clone,
-                &update_device_status_action_clone,
-            );
-            content.set_widget_name("content_loaded");
-
-            // Replace the placeholder with the actual content
-            while let Some(child) = placeholder.first_child() {
-                placeholder.remove(&child);
-            }
-            placeholder.append(&content);
-        });
-
-        pci_buttons.push(custom_stack_selection_button(
-            &window_stack,
-            if is_first {
-                is_first = false;
-                true
-            } else {
-                false
-            },
-            class.clone(),
-            class_i18n,
-            get_icon_for_class(&class)
-                .unwrap_or("dialog-question-symbolic")
-                .into(),
-            &sidebar_toggle,
-        ));
+    for profile in dmi_info.clone().profiles {
+        *profile.used.lock().unwrap() = true;
+        profile.update_installed();
     }
 
-    for (class, devices) in hashmap_usb {
-        let class = format!("usb_class_name_{}", class);
-        let class_i18n = t!(class).to_string();
+    // Store the devices for lazy loading
+    let window_clone = window.clone();
+    let theme_changed_action_clone = theme_changed_action.clone();
+    let update_device_status_action_clone = update_device_status_action.clone();
 
-        // Create a placeholder page with a loading spinner
-        let placeholder = create_placeholder_page(&class_i18n);
+    let dmi_row = custom_stack_selection_button(
+        String::from("dmi"),
+        String::from("dmi"),
+        String::from("application-x-firmware-symbolic"),
+    );
 
-        window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+    let dmi_row_clone0 = dmi_row.clone();
 
-        // Store the devices for lazy loading
-        let devices_clone = devices.clone();
-        let window_clone = window.clone();
-        let theme_changed_action_clone = theme_changed_action.clone();
-        let update_device_status_action_clone = update_device_status_action.clone();
-        let class_i18n_clone = class_i18n.clone();
+    // Connect to the "map" signal to load content when page becomes visible
+    placeholder.connect_map(move |placeholder| {
+        // Check if this page has already been loaded
+        if let Some(child) = placeholder.first_child() {
+            if child.widget_name() == "content_loaded" {
+                return;
+            }
+        }
 
-        // Connect to the "map" signal to load content when page becomes visible
-        placeholder.connect_map(move |placeholder| {
-            // Check if this page has already been loaded
-            if let Some(child) = placeholder.first_child() {
-                if child.widget_name() == "content_loaded" {
-                    return;
+        // Create the actual content
+        let (dmi_name, content) = create_dmi_class(
+            &window_clone,
+            &dmi_info,
+            &theme_changed_action_clone,
+            &update_device_status_action_clone,
+        );
+
+        let mut short_dmi = dmi_name.clone();
+        short_dmi.truncate(15);
+
+        content.set_widget_name("content_loaded");
+
+        dmi_row_clone0
+            .child()
+            .unwrap()
+            .downcast::<gtk::Box>()
+            .unwrap()
+            .last_child()
+            .unwrap()
+            .set_property("label", &short_dmi);
+
+        // Replace the placeholder with the actual content
+        while let Some(child) = placeholder.first_child() {
+            placeholder.remove(&child);
+        }
+        placeholder.append(&content);
+    });
+
+    // Create placeholder pages for each class
+    match hashmap_pci {
+        Some(hashmap_pci) => {
+            for (class, devices) in hashmap_pci {
+                let class = format!("pci_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
+
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
+
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
                 }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_pci_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                pci_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("dialog-question-symbolic")
+                        .into(),
+                ));
             }
+        }
+        None => {}
+    }
 
-            // Create the actual content
-            let content = create_usb_class(
-                &window_clone,
-                &devices_clone,
-                &class_i18n_clone,
-                &theme_changed_action_clone,
-                &update_device_status_action_clone,
-            );
-            content.set_widget_name("content_loaded");
+    match hashmap_usb {
+        Some(hashmap_usb) => {
+            for (class, devices) in hashmap_usb {
+                let class = format!("usb_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
 
-            // Replace the placeholder with the actual content
-            while let Some(child) = placeholder.first_child() {
-                placeholder.remove(&child);
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
+
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
+                }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_usb_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                usb_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("drive-harddisk-usb-symbolic")
+                        .into(),
+                ));
             }
-            placeholder.append(&content);
-        });
+        }
+        None => {}
+    }
 
-        usb_buttons.push(custom_stack_selection_button(
-            &window_stack,
-            if is_first {
-                is_first = false;
-                true
-            } else {
-                false
-            },
-            class.clone(),
-            class_i18n,
-            get_icon_for_class(&class)
-                .unwrap_or("dialog-question-symbolic")
-                .into(),
-            &sidebar_toggle,
-        ));
+    //
+
+    // Create placeholder pages for each class
+    match hashmap_bt {
+        Some(hashmap_bt) => {
+            for (class, devices) in hashmap_bt {
+                let class = format!("bt_class_name_{}", class);
+                let class_i18n = t!(class).to_string();
+
+                // Create a placeholder page with a loading spinner
+                let placeholder = create_placeholder_page(&class_i18n);
+
+                window_stack.add_titled(&placeholder, Some(&class), &class_i18n);
+
+                for device in devices.clone() {
+                    for profile in device.profiles {
+                        *profile.used.lock().unwrap() = true;
+                        profile.update_installed();
+                    }
+                }
+
+                // Store the devices for lazy loading
+                let devices_clone = devices.clone();
+                let window_clone = window.clone();
+                let theme_changed_action_clone = theme_changed_action.clone();
+                let update_device_status_action_clone = update_device_status_action.clone();
+                let class_i18n_clone = class_i18n.clone();
+
+                // Connect to the "map" signal to load content when page becomes visible
+                placeholder.connect_map(move |placeholder| {
+                    // Check if this page has already been loaded
+                    if let Some(child) = placeholder.first_child() {
+                        if child.widget_name() == "content_loaded" {
+                            return;
+                        }
+                    }
+
+                    // Create the actual content
+                    let content = create_bt_class(
+                        &window_clone,
+                        &devices_clone,
+                        &class_i18n_clone,
+                        &theme_changed_action_clone,
+                        &update_device_status_action_clone,
+                    );
+                    content.set_widget_name("content_loaded");
+
+                    // Replace the placeholder with the actual content
+                    while let Some(child) = placeholder.first_child() {
+                        placeholder.remove(&child);
+                    }
+                    placeholder.append(&content);
+                });
+
+                bt_rows.push(custom_stack_selection_button(
+                    class.clone(),
+                    class_i18n,
+                    get_icon_for_class(&class)
+                        .unwrap_or("bluetooth-symbolic")
+                        .into(),
+                ));
+            }
+        }
+        None => {}
     }
 
     main_content_overlay_split_view.set_content(Some(&main_content_content(
@@ -229,22 +389,24 @@ pub fn main_content(
         &window_breakpoint,
         all_profiles_button.clone(),
         sidebar_toggle.clone(),
+        &about_action,
     )));
 
-    main_content_overlay_split_view
-        .set_sidebar(Some(&main_content_sidebar(&pci_buttons, &usb_buttons)));
+    main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(
+        &window_stack,
+        &pci_rows,
+        &usb_rows,
+        &dmi_row,
+        &bt_rows,
+    )));
 
     window_breakpoint.add_setter(
         &main_content_overlay_split_view,
         "collapsed",
         Some(&true.to_value()),
     );
-    
-    window_breakpoint.add_setter(
-        &sidebar_toggle,
-        "active",
-        Some(&false.to_value()),
-    );
+
+    window_breakpoint.add_setter(&sidebar_toggle, "active", Some(&false.to_value()));
 
     window.add_breakpoint(window_breakpoint);
 
@@ -477,144 +639,165 @@ pub fn get_icon_for_class(class: &str) -> Option<&'static str> {
         "usb_class_name_EF" => Some("dialog-question-symbolic"),
         "usb_class_name_FE" => Some("dialog-question-symbolic"),
         "usb_class_name_FF" => Some("dialog-question-symbolic"),
+        // bt classes
+        "bt_class_name_260"
+        | "bt_class_name_131072"
+        | "bt_class_name_131332"
+        | "bt_class_name_393476"
+        | "bt_class_name_1057028"
+        | "bt_class_name_1179908"
+        | "bt_class_name_3154180"
+        | "bt_class_name_3670276"
+        | "bt_class_name_3801348"
+        | "bt_class_name_3932420"
+        | "bt_class_name_4063492"
+        | "bt_class_name_8257796"
+        | "bt_class_name_16711940" => Some("uninterruptible-power-supply-symbolic"),
+        "bt_class_name_268"
+        | "bt_class_name_131340"
+        | "bt_class_name_393484"
+        | "bt_class_name_1057036"
+        | "bt_class_name_1179916"
+        | "bt_class_name_1573132"
+        | "bt_class_name_1704204"
+        | "bt_class_name_1835276"
+        | "bt_class_name_1835278"
+        | "bt_class_name_2752780"
+        | "bt_class_name_3014924"
+        | "bt_class_name_3154188"
+        | "bt_class_name_3539212"
+        | "bt_class_name_3670284"
+        | "bt_class_name_3801356"
+        | "bt_class_name_3932428"
+        | "bt_class_name_4063500"
+        | "bt_class_name_7209228"
+        | "bt_class_name_786700"
+        | "bt_class_name_786703"
+        | "bt_class_name_7995660"
+        | "bt_class_name_8257804"
+        | "bt_class_name_1048844"
+        | "bt_class_name_16711948" => Some("computer-laptop-symbolic"),
+        "bt_class_name_278"
+        | "bt_class_name_1048852"
+        | "bt_class_name_1179924"
+        | "bt_class_name_1704212"
+        | "bt_class_name_10092820" => Some("computer-laptop-symbolic"),
+        "bt_class_name_131344"
+        | "bt_class_name_655632"
+        | "bt_class_name_1704208"
+        | "bt_class_name_2752784"
+        | "bt_class_name_13762832" => Some("tablet-symbolic"),
+        "bt_class_name_516"
+        | "bt_class_name_1049092"
+        | "bt_class_name_1573380"
+        | "bt_class_name_2097668"
+        | "bt_class_name_3146244"
+        | "bt_class_name_4194820"
+        | "bt_class_name_4203012"
+        | "bt_class_name_4850180"
+        | "bt_class_name_5243396"
+        | "bt_class_name_5374468"
+        | "bt_class_name_5382660"
+        | "bt_class_name_5767684"
+        | "bt_class_name_5898756"
+        | "bt_class_name_5906948"
+        | "bt_class_name_6160900"
+        | "bt_class_name_7471620" => Some("phone-symbolic"),
+        "bt_class_name_520"
+        | "bt_class_name_1049096"
+        | "bt_class_name_524808"
+        | "bt_class_name_5374472"
+        | "bt_class_name_5898760" => Some("network-transmit-symbolic"),
+        "bt_class_name_1032"
+        | "bt_class_name_2098184"
+        | "bt_class_name_2360328"
+        | "bt_class_name_2622472"
+        | "bt_class_name_3146760"
+        | "bt_class_name_3408904"
+        | "bt_class_name_3671048"
+        | "bt_class_name_7472136"
+        | "bt_class_name_7603208"
+        | "bt_class_name_7734280"
+        | "bt_class_name_15991812" => Some("audio-headset-symbolic"),
+        "bt_class_name_1052" | "bt_class_name_656412" | "bt_class_name_6947868" => {
+            Some("audio-speakers-symbolic")
+        }
+        "bt_class_name_1060" => Some("drive-multidisk-symbolic"),
+        "bt_class_name_1084" | "bt_class_name_525372" => Some("video-display-symbolic"),
+        "bt_class_name_525848" => Some("video-display-symbolic"),
+        "bt_class_name_1288" | "bt_class_name_1412" => Some("input-gaming-symbolic"),
+        "bt_class_name_1344" | "bt_class_name_9536" => Some("input-keyboard-symbolic"),
+        "bt_class_name_1796" | "bt_class_name_2361092" => Some("stopwatch-symbolic"),
+        "bt_class_name_2312" => Some("sensors-temperature-symbolic"),
+        "bt_class_name_9484" => Some("input-tvremote-symbolic"),
+        "bt_class_name_9600" => Some("input-mouse-symbolic"),
+        "bt_class_name_9620" => Some("input-tablet-symbolic"),
+        "bt_class_name_66060"
+        | "bt_class_name_66816"
+        | "bt_class_name_5243404"
+        | "bt_class_name_5767692"
+        | "bt_class_name_5898764"
+        | "bt_class_name_6423052"
+        | "bt_class_name_7340556"
+        | "bt_class_name_7471628"
+        | "bt_class_name_7864844"
+        | "bt_class_name_7995916" => Some("phone-symbolic"),
+        "bt_class_name_263744" => Some("scanner-symbolic"),
+        "bt_class_name_263808" | "bt_class_name_1312384" => Some("printer-symbolic"),
+        "bt_class_name_5374476" => Some("computer-laptop-symbolic"),
+        "bt_class_name_2098180"
+        | "bt_class_name_2360324"
+        | "bt_class_name_2884612"
+        | "bt_class_name_3408900"
+        | "bt_class_name_7341060"
+        | "bt_class_name_7480324"
+        | "bt_class_name_11625476"
+        | "bt_class_name_11863044"
+        | "bt_class_name_11887620"
+        | "bt_class_name_16131076" => Some("audio-headset-symbolic"),
+        "bt_class_name_2360340" => Some("audio-speakers-symbolic"),
+        "bt_class_name_2228508" => Some("input-tablet-symbolic"),
+        "bt_class_name_4063496" => Some("network-server-symbolic"),
+        "bt_class_name_4194832" => Some("modem-symbolic"),
         //
         _ => None,
     }
 }
 
-fn custom_stack_selection_button(
-    stack: &gtk::Stack,
-    active: bool,
-    name: String,
-    title: String,
-    icon: String,
-    toggle_sidebar: &gtk::ToggleButton,
-) -> gtk::Button {
+fn custom_stack_selection_button(name: String, title: String, icon: String) -> gtk::ListBoxRow {
     // Create a box to hold the icon and label with proper spacing
     let button_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
+        .margin_top(4)
+        .margin_bottom(4)
+        .margin_start(8)
+        .margin_end(8)
         .spacing(8)
         .build();
-    
+
     // Add the icon
     let icon_widget = gtk::Image::builder()
         .icon_name(&icon)
         .pixel_size(16)
         .build();
-    
+
     // Add the label
     let label = gtk::Label::builder()
         .label(&title)
         .halign(gtk::Align::Start)
         .hexpand(true)
         .build();
-    
+
     // Add them to the box
     button_box.append(&icon_widget);
     button_box.append(&label);
-    
+
     // Create the button with the box as its child
-    let button = gtk::Button::builder()
+    let listboxrow = gtk::ListBoxRow::builder()
         .child(&button_box)
         .tooltip_text(&title)
-        .margin_top(4)
-        .margin_bottom(4)
-        .margin_start(8)
-        .margin_end(8)
+        .name(name)
         .build();
-    
-    // Add CSS class for styling
-    button.add_css_class("flat");
-    
-    let name_clone = name.clone();
-    button.connect_clicked(clone!(
-        #[weak]
-        stack,
-        #[weak]
-        toggle_sidebar,
-        move |_| {
-            stack.set_visible_child_name(&name_clone);
-            toggle_sidebar.set_active(false);
-        }
-    ));
-    
-    if active {
-        stack.set_visible_child_name(&name);
-        button.add_css_class("sidebar-active-button");
-    }
-    
-    button
-}
 
-pub fn run_in_lock_script(
-    log_loop_sender: &async_channel::Sender<crate::ChannelMsg>,
-    script: &str,
-) {
-    use crate::ChannelMsg;
-    use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
-    use users::get_current_username;
-
-    let file_path = "/var/cache/cfhdb/script_lock.sh";
-    let file_fs_path = std::path::Path::new(file_path);
-    if file_fs_path.exists() {
-        std::fs::remove_file(file_fs_path).unwrap();
-    }
-    {
-        let mut file = std::fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(file_path)
-            .expect(&(file_path.to_string() + "cannot be read"));
-        file.write_all(script.as_bytes())
-            .expect(&(file_path.to_string() + "cannot be written to"));
-        let mut perms = file
-            .metadata()
-            .expect(&(file_path.to_string() + "cannot be read"))
-            .permissions();
-        perms.set_mode(0o777);
-        std::fs::set_permissions(file_path, perms)
-            .expect(&(file_path.to_string() + "cannot be written to"));
-    }
-    let username = get_current_username().unwrap();
-    let final_cmd = if username == "root" {
-        duct::cmd!(file_path)
-    } else {
-        duct::cmd!("pkexec", file_path)
-    };
-
-    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
-        Ok(_) => {
-            log_loop_sender
-                .send_blocking(ChannelMsg::SuccessMsg)
-                .unwrap();
-        }
-        Err(_) => {
-            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
-        }
-    }
-}
-
-pub fn exec_duct_with_live_channel_stdout(
-    sender: &async_channel::Sender<crate::ChannelMsg>,
-    duct_expr: duct::Expression,
-) -> Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>> {
-    use crate::ChannelMsg;
-    use std::io::BufRead;
-
-    let (pipe_reader, pipe_writer) = os_pipe::pipe()?;
-    let child = duct_expr
-        .stderr_to_stdout()
-        .stdout_file(pipe_writer)
-        .start()?;
-    for line in std::io::BufReader::new(pipe_reader).lines() {
-        sender
-            .send_blocking(ChannelMsg::OutputLine(line?))
-            .expect("Channel needs to be opened.")
-    }
-
-    child.wait()?;
-
-    Ok(())
+    listboxrow
 }

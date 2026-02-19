@@ -16,6 +16,7 @@ pub struct PreCheckedPciDevice {
 pub struct PreCheckedPciProfile {
     profile: CfhdbPciProfile,
     installed: Arc<Mutex<bool>>,
+    pub used: Arc<Mutex<bool>>,
 }
 
 impl PreCheckedPciProfile {
@@ -23,6 +24,7 @@ impl PreCheckedPciProfile {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
+            used: Arc::new(Mutex::new(false)),
         }
     }
     pub fn profile(&self) -> CfhdbPciProfile {

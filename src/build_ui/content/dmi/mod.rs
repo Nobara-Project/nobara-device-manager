@@ -1,65 +1,40 @@
 use crate::{
     build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle},
-    cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile},
+    cfhdb::dmi::{PreCheckedDmiDevice, PreCheckedDmiProfile},
     config::distro_package_manager,
     ChannelMsg,
 };
 use adw::{prelude::*, *};
 use gtk::{
-    gdk::RGBA,
     glib::{clone, MainContext},
     Align, Orientation,
     Orientation::Vertical,
-    ScrolledWindow, SelectionMode,
+    ScrolledWindow,
 };
-
-use libcfhdb::usb::CfhdbUsbDevice;
 use std::{process::Command, rc::Rc, sync::Arc, thread};
 
 use users::get_current_username;
 
 use super::{error_dialog, run_in_lock_script};
 
-pub fn create_usb_class(
+pub fn create_dmi_class(
     window: &ApplicationWindow,
-    devices: &Vec<PreCheckedUsbDevice>,
-    class: &str,
+    info: &PreCheckedDmiInfo,
     theme_changed_action: &gio::SimpleAction,
-    update_device_status_action: &gio::SimpleAction,
-) -> ScrolledWindow {
+    update_info_status_action: &gio::SimpleAction,
+) -> (String, ScrolledWindow) {
     // Update all profiles' installation status before creating the UI
-    for device in devices {
-        for profile in &device.profiles {
-            profile.update_installed();
-        }
+    for profile in &info.profiles {
+        profile.update_installed();
     }
-    let devices_list_row = gtk::ListBox::builder()
-        .margin_top(20)
-        .margin_bottom(20)
-        .margin_start(20)
-        .margin_end(20)
-        .selection_mode(SelectionMode::Browse)
-        .vexpand(true)
-        .hexpand(true)
-        .build();
-    devices_list_row.add_css_class("boxed-list");
-    //
-    let devices_navigation_page_toolbar = adw::ToolbarView::builder()
-        .content(&devices_list_row)
-        .build();
-    devices_navigation_page_toolbar.add_top_bar(
-        &adw::HeaderBar::builder()
-            .show_end_title_buttons(false)
-            .show_start_title_buttons(false)
-            .build(),
+
+    let navigation_view = dmi_info_page(
+        &window,
+        &info,
+        &theme_changed_action,
+        &update_info_status_action,
     );
-    let devices_navigation_page = adw::NavigationPage::builder()
-        .title(class)
-        .child(&devices_navigation_page_toolbar)
-        .build();
-    //
-    let navigation_view = adw::NavigationView::builder().build();
-    navigation_view.add(&devices_navigation_page);
+
     let scroll = gtk::ScrolledWindow::builder()
         .max_content_width(650)
         .min_content_width(300)
@@ -67,63 +42,19 @@ pub fn create_usb_class(
         .child(&navigation_view)
         .build();
     //
-    for device in devices {
-        let device_content = &device.device;
-        let device_status_indicator = ColoredCircle::new();
-        device_status_indicator.set_width_request(15);
-        device_status_indicator.set_height_request(15);
-        let device_title = format!(
-            "{} - {}",
-            &device_content.manufacturer_string_index, &device_content.product_string_index
-        );
-        let device_navigation_page_toolbar = adw::ToolbarView::builder()
-            .content(&usb_device_page(
-                &window,
-                &device,
-                &theme_changed_action,
-                &update_device_status_action,
-                &device_status_indicator,
-            ))
-            .build();
-        device_navigation_page_toolbar.add_top_bar(
-            &adw::HeaderBar::builder()
-                .show_end_title_buttons(false)
-                .show_start_title_buttons(false)
-                .build(),
-        );
-        let device_navigation_page = adw::NavigationPage::builder()
-            .title(&device_title)
-            .child(&device_navigation_page_toolbar)
-            .build();
-        navigation_view.add(&device_navigation_page);
-        let action_row = adw::ActionRow::builder()
-            .title(&device_title)
-            .subtitle(&device_content.sysfs_busid)
-            .activatable(true)
-            .build();
-        action_row.connect_activated(clone!(
-            #[weak]
-            navigation_view,
-            #[weak]
-            device_navigation_page,
-            move |_| {
-                navigation_view.push(&device_navigation_page);
-            }
-        ));
-        action_row.add_suffix(&device_status_indicator);
-        devices_list_row.append(&action_row);
-    }
-    scroll
+    let info_content = &info.info;
+    let info_title = info_content.product_name.clone();
+
+    (info_title, scroll)
 }
 
-fn usb_device_page(
+fn dmi_info_page(
     window: &ApplicationWindow,
-    device: &PreCheckedUsbDevice,
+    info: &PreCheckedDmiInfo,
     theme_changed_action: &gio::SimpleAction,
-    update_device_status_action: &gio::SimpleAction,
-    device_status_indicator: &ColoredCircle,
+    update_info_status_action: &gio::SimpleAction,
 ) -> gtk::Box {
-    let device_content = &device.device;
+    let info_content = &info.info;
     let content_box = gtk::Box::builder()
         .hexpand(true)
         .vexpand(true)
@@ -140,156 +71,190 @@ fn usb_device_page(
         .build();
 
     //
-    let device_controls_box = gtk::Box::builder()
-        .orientation(Orientation::Horizontal)
-        .valign(Align::Start)
-        .halign(Align::Center)
-        .margin_start(10)
-        .margin_end(10)
-        .margin_bottom(20)
-        .margin_top(20)
-        .build();
-    device_controls_box.add_css_class("linked");
-
-    //
     let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let color_badges_size_group1 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
-    //
     let mut color_badges_vec = vec![];
-    let started_color_badge = ColorBadge::new();
-    started_color_badge.set_label0(textwrap::fill(&t!("device_started"), 10));
-    started_color_badge.set_group_size0(&color_badges_size_group0);
-    started_color_badge.set_group_size1(&color_badges_size_group1);
-    started_color_badge.set_theme_changed_action(theme_changed_action);
 
-    color_badges_vec.push(&started_color_badge);
+    //
+    let bios_date_color_badge = ColorBadge::new();
+    bios_date_color_badge.set_label0(textwrap::fill(&t!("info_bios_date"), 10));
+    bios_date_color_badge.set_label1(textwrap::fill(&info_content.bios_date, 10));
+    bios_date_color_badge.set_css_style("background-accent-bg");
+    bios_date_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_date_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_date_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let enabled_color_badge = ColorBadge::new();
-    enabled_color_badge.set_label0(textwrap::fill(&t!("device_enabled"), 10));
-    enabled_color_badge.set_group_size0(&color_badges_size_group0);
-    enabled_color_badge.set_group_size1(&color_badges_size_group1);
-    enabled_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_date_color_badge);
+    //
 
-    color_badges_vec.push(&enabled_color_badge);
+    let bios_release_color_badge = ColorBadge::new();
+    bios_release_color_badge.set_label0(textwrap::fill(&t!("info_bios_release"), 10));
+    bios_release_color_badge.set_label1(textwrap::fill(&info_content.bios_release, 10));
+    bios_release_color_badge.set_css_style("background-accent-bg");
+    bios_release_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_release_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_release_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let driver_color_badge = ColorBadge::new();
-    driver_color_badge.set_label0(textwrap::fill(&t!("device_driver"), 10));
-    driver_color_badge.set_css_style("background-accent-bg");
-    driver_color_badge.set_group_size0(&color_badges_size_group0);
-    driver_color_badge.set_group_size1(&color_badges_size_group1);
-    driver_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_release_color_badge);
+    //
 
-    color_badges_vec.push(&driver_color_badge);
+    let bios_vendor_color_badge = ColorBadge::new();
+    bios_vendor_color_badge.set_label0(textwrap::fill(&t!("info_bios_vendor"), 10));
+    bios_vendor_color_badge.set_label1(textwrap::fill(&info_content.bios_vendor, 10));
+    bios_vendor_color_badge.set_css_style("background-accent-bg");
+    bios_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_vendor_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let sysfs_busid_color_badge = ColorBadge::new();
-    sysfs_busid_color_badge.set_label0(textwrap::fill(&t!("device_sysfs_busid"), 10));
-    sysfs_busid_color_badge.set_css_style("background-accent-bg");
-    sysfs_busid_color_badge.set_group_size0(&color_badges_size_group0);
-    sysfs_busid_color_badge.set_group_size1(&color_badges_size_group1);
-    sysfs_busid_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_vendor_color_badge);
+    //
 
-    color_badges_vec.push(&sysfs_busid_color_badge);
+    let bios_version_color_badge = ColorBadge::new();
+    bios_version_color_badge.set_label0(textwrap::fill(&t!("info_bios_version"), 10));
+    bios_version_color_badge.set_label1(textwrap::fill(&info_content.bios_version, 10));
+    bios_version_color_badge.set_css_style("background-accent-bg");
+    bios_version_color_badge.set_group_size0(&color_badges_size_group0);
+    bios_version_color_badge.set_group_size1(&color_badges_size_group1);
+    bios_version_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let vendor_id_color_badge = ColorBadge::new();
-    vendor_id_color_badge.set_label0(textwrap::fill(&t!("device_vendor_id"), 10));
-    vendor_id_color_badge.set_css_style("background-accent-bg");
-    vendor_id_color_badge.set_group_size0(&color_badges_size_group0);
-    vendor_id_color_badge.set_group_size1(&color_badges_size_group1);
-    vendor_id_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&bios_version_color_badge);
+    //
 
-    color_badges_vec.push(&vendor_id_color_badge);
+    let board_asset_tag_color_badge = ColorBadge::new();
+    board_asset_tag_color_badge.set_label0(textwrap::fill(&t!("info_board_asset_tag"), 10));
+    board_asset_tag_color_badge.set_label1(textwrap::fill(&info_content.board_asset_tag, 10));
+    board_asset_tag_color_badge.set_css_style("background-accent-bg");
+    board_asset_tag_color_badge.set_group_size0(&color_badges_size_group0);
+    board_asset_tag_color_badge.set_group_size1(&color_badges_size_group1);
+    board_asset_tag_color_badge.set_theme_changed_action(theme_changed_action);
 
-    let product_id_color_badge = ColorBadge::new();
-    product_id_color_badge.set_label0(textwrap::fill(&t!("device_product_id"), 10));
-    product_id_color_badge.set_css_style("background-accent-bg");
-    product_id_color_badge.set_group_size0(&color_badges_size_group0);
-    product_id_color_badge.set_group_size1(&color_badges_size_group1);
-    product_id_color_badge.set_theme_changed_action(theme_changed_action);
+    color_badges_vec.push(&board_asset_tag_color_badge);
+    //
 
-    color_badges_vec.push(&product_id_color_badge);
+    let board_name_color_badge = ColorBadge::new();
+    board_name_color_badge.set_label0(textwrap::fill(&t!("info_board_name"), 10));
+    board_name_color_badge.set_label1(textwrap::fill(&info_content.board_name, 10));
+    board_name_color_badge.set_css_style("background-accent-bg");
+    board_name_color_badge.set_group_size0(&color_badges_size_group0);
+    board_name_color_badge.set_group_size1(&color_badges_size_group1);
+    board_name_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_name_color_badge);
+    //
+
+    let board_vendor_color_badge = ColorBadge::new();
+    board_vendor_color_badge.set_label0(textwrap::fill(&t!("info_board_vendor"), 10));
+    board_vendor_color_badge.set_label1(textwrap::fill(&info_content.board_vendor, 10));
+    board_vendor_color_badge.set_css_style("background-accent-bg");
+    board_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    board_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    board_vendor_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_vendor_color_badge);
+
+    //
+
+    let board_version_color_badge = ColorBadge::new();
+    board_version_color_badge.set_label0(textwrap::fill(&t!("info_board_version"), 10));
+    board_version_color_badge.set_label1(textwrap::fill(&info_content.bios_version, 10));
+    board_version_color_badge.set_css_style("background-accent-bg");
+    board_version_color_badge.set_group_size0(&color_badges_size_group0);
+    board_version_color_badge.set_group_size1(&color_badges_size_group1);
+    board_version_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&board_version_color_badge);
+    //
+
+    let product_family_color_badge = ColorBadge::new();
+    product_family_color_badge.set_label0(textwrap::fill(&t!("info_product_family"), 10));
+    product_family_color_badge.set_label1(textwrap::fill(&info_content.product_family, 10));
+    product_family_color_badge.set_css_style("background-accent-bg");
+    product_family_color_badge.set_group_size0(&color_badges_size_group0);
+    product_family_color_badge.set_group_size1(&color_badges_size_group1);
+    product_family_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_family_color_badge);
+    //
+
+    let product_name_color_badge = ColorBadge::new();
+    product_name_color_badge.set_label0(textwrap::fill(&t!("info_product_name"), 10));
+    product_name_color_badge.set_label1(textwrap::fill(&info_content.product_name, 10));
+    product_name_color_badge.set_css_style("background-accent-bg");
+    product_name_color_badge.set_group_size0(&color_badges_size_group0);
+    product_name_color_badge.set_group_size1(&color_badges_size_group1);
+    product_name_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_name_color_badge);
+    //
+
+    let product_sku_color_badge = ColorBadge::new();
+    product_sku_color_badge.set_label0(textwrap::fill(&t!("info_product_sku"), 10));
+    product_sku_color_badge.set_label1(textwrap::fill(&info_content.product_sku, 10));
+    product_sku_color_badge.set_css_style("background-accent-bg");
+    product_sku_color_badge.set_group_size0(&color_badges_size_group0);
+    product_sku_color_badge.set_group_size1(&color_badges_size_group1);
+    product_sku_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_sku_color_badge);
+    //
+
+    let product_version_color_badge = ColorBadge::new();
+    product_version_color_badge.set_label0(textwrap::fill(&t!("info_product_version"), 10));
+    product_version_color_badge.set_label1(textwrap::fill(&info_content.product_version, 10));
+    product_version_color_badge.set_css_style("background-accent-bg");
+    product_version_color_badge.set_group_size0(&color_badges_size_group0);
+    product_version_color_badge.set_group_size1(&color_badges_size_group1);
+    product_version_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&product_version_color_badge);
+    //
+
+    let sys_vendor_color_badge = ColorBadge::new();
+    sys_vendor_color_badge.set_label0(textwrap::fill(&t!("info_sys_vendor"), 10));
+    sys_vendor_color_badge.set_label1(textwrap::fill(&info_content.sys_vendor, 10));
+    sys_vendor_color_badge.set_css_style("background-accent-bg");
+    sys_vendor_color_badge.set_group_size0(&color_badges_size_group0);
+    sys_vendor_color_badge.set_group_size1(&color_badges_size_group1);
+    sys_vendor_color_badge.set_theme_changed_action(theme_changed_action);
+
+    color_badges_vec.push(&sys_vendor_color_badge);
     //
     let mut last_widget: (Option<&ColorBadge>, i32) = (None, 0);
-    let row_count = (color_badges_vec.len() / 2) as i32;
+    let mut next_position = gtk::PositionType::Bottom;
+    let max_row_count = 4;
 
     for badge in color_badges_vec {
         if last_widget.0.is_none() {
             color_badges_grid.attach(badge, 0, 0, 1, 1);
-        } else if last_widget.1 > row_count {
+        } else if last_widget.1 < max_row_count {
             color_badges_grid.attach_next_to(
                 badge,
                 Some(last_widget.0.unwrap()),
-                gtk::PositionType::Top,
+                next_position,
                 1,
                 1,
-            )
-        } else if last_widget.1 == row_count {
+            );
+            last_widget.1 += 1;
+        } else if last_widget.1 == max_row_count {
             color_badges_grid.attach_next_to(
                 badge,
                 Some(last_widget.0.unwrap()),
-                gtk::PositionType::Left,
+                gtk::PositionType::Right,
                 1,
                 1,
-            )
-        } else {
-            color_badges_grid.attach_next_to(
-                badge,
-                Some(last_widget.0.unwrap()),
-                gtk::PositionType::Bottom,
-                1,
-                1,
-            )
+            );
+            last_widget.1 = 0;
+            if next_position == gtk::PositionType::Top {
+                next_position = gtk::PositionType::Bottom
+            } else {
+                next_position = gtk::PositionType::Top
+            }
         }
 
         last_widget.0 = Some(badge);
-        last_widget.1 += 1;
     }
     //
-
-    let control_button_start_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-start-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_start"))
-        .build();
-    let control_button_stop_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-stop-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_stop"))
-        .build();
-    let control_button_enable_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("emblem-ok-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_enable"))
-        .build();
-    let control_button_disable_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("edit-clear-all-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_disable"))
-        .build();
 
     let available_profiles_list_row = adw::PreferencesGroup::builder()
         .margin_top(20)
@@ -305,68 +270,8 @@ fn usb_device_page(
 
     let rows_size_group = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
-    let mut profiles = device.profiles.clone();
+    let mut profiles = info.profiles.clone();
     profiles.sort_by_key(|x| x.profile().priority);
-
-    control_button_start_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.start_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_start_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_enable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.enable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_stop_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.stop_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_disable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.disable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string()),
-            }
-        }
-    ));
 
     let mut normal_profiles = vec![];
     let mut veiled_profiles = vec![];
@@ -449,7 +354,7 @@ fn usb_device_page(
             #[strong]
             window,
             #[strong]
-            update_device_status_action,
+            update_info_status_action,
             #[strong]
             profile,
             #[strong]
@@ -459,7 +364,7 @@ fn usb_device_page(
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &update_device_status_action,
+                    &update_info_status_action,
                     &profile,
                     &profiles_rc,
                     "install",
@@ -471,7 +376,7 @@ fn usb_device_page(
             #[strong]
             window,
             #[strong]
-            update_device_status_action,
+            update_info_status_action,
             #[strong]
             profile,
             #[strong]
@@ -481,7 +386,7 @@ fn usb_device_page(
             move |_| {
                 profile_modify(
                     window.clone(),
-                    &update_device_status_action,
+                    &update_info_status_action,
                     &profile,
                     &profiles_rc,
                     "remove",
@@ -496,7 +401,7 @@ fn usb_device_page(
             normal_profiles.push(profile_expander_row);
         }
         //
-        update_device_status_action.connect_activate(clone!(move |_, _| {
+        update_info_status_action.connect_activate(clone!(move |_, _| {
             let profile_status = profile.installed();
             profile_install_button.set_sensitive(!profile_status);
             if profile_content.removable {
@@ -508,89 +413,9 @@ fn usb_device_page(
         }));
     }
 
-    update_device_status_action.connect_activate(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        device_status_indicator,
-        #[strong]
-        control_button_start_device_button,
-        #[strong]
-        control_button_stop_device_button,
-        #[strong]
-        control_button_enable_device_button,
-        #[strong]
-        control_button_disable_device_button,
-        move |_, _| {
-            let updated_device =
-                CfhdbUsbDevice::get_device_from_busid(&device_content.sysfs_busid).unwrap();
-            let (started, enabled) = (
-                updated_device.started.unwrap_or_default(),
-                updated_device.enabled,
-            );
-            let (color, tooltip) = match (enabled, started) {
-                (true, true) => (RGBA::GREEN, &t!("device_status_active_enabled")),
-                (false, true) => (RGBA::BLUE, &t!("device_status_active_disabled")),
-                (true, false) => (
-                    RGBA::new(60.0, 255.0, 0.0, 1.0),
-                    &t!("device_status_inactive_enabled"),
-                ),
-                (false, false) => (RGBA::RED, &t!("device_status_inactive_disabled")),
-            };
-            device_status_indicator.set_color(color);
-            device_status_indicator.set_tooltip_text(Some(tooltip));
-
-            control_button_start_device_button.set_sensitive(!started);
-            control_button_stop_device_button.set_sensitive(started);
-
-            control_button_enable_device_button.set_sensitive(!enabled);
-            control_button_disable_device_button.set_sensitive(enabled);
-
-            let device_started_i18n = if started {
-                &t!("status_yes")
-            } else {
-                &t!("status_no")
-            };
-            let device_enabled_i18n = if enabled {
-                &t!("status_yes")
-            } else {
-                &t!("status_no")
-            };
-            started_color_badge.set_label1(textwrap::fill(device_started_i18n, 10));
-            started_color_badge.set_css_style(if started {
-                "background-accent-bg"
-            } else {
-                "background-red-bg"
-            });
-            enabled_color_badge.set_label1(textwrap::fill(device_enabled_i18n, 10));
-            enabled_color_badge.set_css_style(if enabled {
-                "background-accent-bg"
-            } else {
-                "background-red-bg"
-            });
-            driver_color_badge
-                .set_label1(textwrap::fill(&device_content.kernel_driver.as_str(), 10));
-            sysfs_busid_color_badge
-                .set_label1(textwrap::fill(&device_content.sysfs_busid.as_str(), 10));
-            vendor_id_color_badge
-                .set_label1(textwrap::fill(&device_content.vendor_id.as_str(), 10));
-            product_id_color_badge
-                .set_label1(textwrap::fill(&device_content.product_id.as_str(), 10));
-        }
-    ));
-
-    update_device_status_action.activate(None);
-
-    device_controls_box.append(&control_button_start_device_button);
-
-    device_controls_box.append(&control_button_stop_device_button);
-
-    device_controls_box.append(&control_button_enable_device_button);
-
-    device_controls_box.append(&control_button_disable_device_button);
+    update_info_status_action.activate(None);
 
     content_box.append(&color_badges_grid);
-    content_box.append(&device_controls_box);
     for widget in normal_profiles {
         available_profiles_list_row.add(&widget);
     }
@@ -626,9 +451,9 @@ fn usb_device_page(
 
 pub fn profile_modify(
     window: ApplicationWindow,
-    update_device_status_action: &gio::SimpleAction,
-    profile: &Arc<PreCheckedUsbProfile>,
-    all_profiles: &Rc<Vec<Arc<PreCheckedUsbProfile>>>,
+    update_info_status_action: &gio::SimpleAction,
+    profile: &Arc<PreCheckedDmiProfile>,
+    all_profiles: &Rc<Vec<Arc<PreCheckedDmiProfile>>>,
     opreation: &str,
     theme_changed_action: &gio::SimpleAction,
 ) {

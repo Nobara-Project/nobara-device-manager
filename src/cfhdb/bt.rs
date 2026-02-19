@@ -1,5 +1,5 @@
 use crate::{config::*, ChannelMsg};
-use libcfhdb::usb::*;
+use libcfhdb::bt::*;
 use std::{
     collections::HashMap,
     fs,
@@ -8,26 +8,26 @@ use std::{
 };
 
 #[derive(Clone)]
-pub struct PreCheckedUsbDevice {
-    pub device: CfhdbUsbDevice,
-    pub profiles: Vec<Arc<PreCheckedUsbProfile>>,
+pub struct PreCheckedBtDevice {
+    pub device: CfhdbBtDevice,
+    pub profiles: Vec<Arc<PreCheckedBtProfile>>,
 }
 
-pub struct PreCheckedUsbProfile {
-    profile: CfhdbUsbProfile,
+pub struct PreCheckedBtProfile {
+    profile: CfhdbBtProfile,
     installed: Arc<Mutex<bool>>,
     pub used: Arc<Mutex<bool>>,
 }
 
-impl PreCheckedUsbProfile {
-    pub fn new(profile: CfhdbUsbProfile) -> Self {
+impl PreCheckedBtProfile {
+    pub fn new(profile: CfhdbBtProfile) -> Self {
         Self {
             profile,
             installed: Arc::new(Mutex::new(false)),
             used: Arc::new(Mutex::new(false)),
         }
     }
-    pub fn profile(&self) -> CfhdbUsbProfile {
+    pub fn profile(&self) -> CfhdbBtProfile {
         self.profile.clone()
     }
     pub fn installed(&self) -> bool {
@@ -38,12 +38,12 @@ impl PreCheckedUsbProfile {
     }
 }
 
-pub fn get_usb_devices(
-    profiles: &[Arc<PreCheckedUsbProfile>],
-) -> Option<HashMap<String, Vec<PreCheckedUsbDevice>>> {
-    match CfhdbUsbDevice::get_devices() {
+pub fn get_bt_devices(
+    profiles: &[Arc<PreCheckedBtProfile>],
+) -> Option<HashMap<String, Vec<PreCheckedBtDevice>>> {
+    match CfhdbBtDevice::get_devices() {
         Some(devices) => {
-            let hashmap = CfhdbUsbDevice::create_class_hashmap(devices);
+            let hashmap = CfhdbBtDevice::create_class_hashmap(devices);
             return Some(
                 hashmap
                     .iter()
@@ -62,28 +62,54 @@ pub fn get_usb_devices(
 }
 
 fn get_pre_checked_device(
-    profile_data: &[Arc<PreCheckedUsbProfile>],
-    device: CfhdbUsbDevice,
-) -> PreCheckedUsbDevice {
+    profile_data: &[Arc<PreCheckedBtProfile>],
+    device: CfhdbBtDevice,
+) -> PreCheckedBtDevice {
     let mut available_profiles = vec![];
     for profile_arc in profile_data.iter() {
         let profile = profile_arc.profile();
         let matching = {
-            if (profile.blacklisted_class_codes.contains(&"*".to_owned())
-                || profile.blacklisted_class_codes.contains(&device.class_code))
-                || (profile.blacklisted_vendor_ids.contains(&"*".to_owned())
-                    || profile.blacklisted_vendor_ids.contains(&device.vendor_id))
-                || (profile.blacklisted_product_ids.contains(&"*".to_owned())
-                    || profile.blacklisted_product_ids.contains(&device.product_id))
+            if (profile.blacklisted_class_ids.contains(&"*".to_owned())
+                || profile.blacklisted_class_ids.contains(&device.class_id))
+                || (profile.blacklisted_bt_names.contains(&"*".to_owned())
+                    || profile.blacklisted_bt_names.contains(&device.name))
+                || (profile
+                    .blacklisted_modalias_device_ids
+                    .contains(&"*".to_owned())
+                    || profile
+                        .blacklisted_modalias_device_ids
+                        .contains(&device.modalias_device_id))
+                || (profile
+                    .blacklisted_modalias_product_ids
+                    .contains(&"*".to_owned())
+                    || profile
+                        .blacklisted_modalias_product_ids
+                        .contains(&device.modalias_product_id))
+                || (profile
+                    .blacklisted_modalias_vendor_ids
+                    .contains(&"*".to_owned())
+                    || profile
+                        .blacklisted_modalias_vendor_ids
+                        .contains(&device.modalias_vendor_id))
             {
                 false
             } else {
-                (profile.class_codes.contains(&"*".to_owned())
-                    || profile.class_codes.contains(&device.class_code))
-                    && (profile.vendor_ids.contains(&"*".to_owned())
-                        || profile.vendor_ids.contains(&device.vendor_id))
-                    && (profile.product_ids.contains(&"*".to_owned())
-                        || profile.product_ids.contains(&device.product_id))
+                let mut result = true;
+                for (profile_field, info_field) in [
+                    (&profile.bt_names, &device.name),
+                    (&profile.modalias_device_ids, &device.modalias_device_id),
+                    (&profile.modalias_product_ids, &device.modalias_product_id),
+                    (&profile.modalias_vendor_ids, &device.modalias_vendor_id),
+                ] {
+                    if profile_field.contains(&"*".to_owned()) || profile_field.contains(info_field)
+                    {
+                        continue;
+                    } else {
+                        result = false;
+                        break;
+                    }
+                }
+                result
             }
         };
 
@@ -91,34 +117,34 @@ fn get_pre_checked_device(
             available_profiles.push(profile_arc.clone());
         }
     }
-    PreCheckedUsbDevice {
+    PreCheckedBtDevice {
         device,
         profiles: available_profiles,
     }
 }
 
-pub fn get_usb_profiles_from_url(
+pub fn get_bt_profiles_from_url(
     sender: &async_channel::Sender<ChannelMsg>,
-) -> Result<Vec<CfhdbUsbProfile>, std::io::Error> {
-    let cached_db_path = Path::new("/var/cache/cfhdb/usb.json");
+) -> Result<Vec<CfhdbBtProfile>, std::io::Error> {
+    let cached_db_path = Path::new("/var/cache/cfhdb/bt.json");
     sender
         .send_blocking(ChannelMsg::OutputLine(format!(
             "[{}] {}",
             t!("info"),
-            t!("usb_download_starting")
+            t!("bt_download_starting")
         )))
         .expect("Channel closed");
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap();
-    let data = match client.get(USB_PROFILE_JSON_URL.clone()).send() {
+    let data = match client.get(BT_PROFILE_JSON_URL.clone()).send() {
         Ok(t) => {
             sender
                 .send_blocking(ChannelMsg::OutputLine(format!(
                     "[{}] {}",
                     t!("info"),
-                    t!("usb_download_successful")
+                    t!("bt_download_successful")
                 )))
                 .expect("Channel closed");
             let cache = t.text().unwrap();
@@ -131,7 +157,7 @@ pub fn get_usb_profiles_from_url(
                 .send_blocking(ChannelMsg::OutputLine(format!(
                     "[{}] {}",
                     t!("warn"),
-                    t!("usb_download_failed")
+                    t!("bt_download_failed")
                 )))
                 .expect("Channel closed");
             if cached_db_path.exists() {
@@ -139,7 +165,7 @@ pub fn get_usb_profiles_from_url(
                     .send_blocking(ChannelMsg::OutputLine(format!(
                         "[{}] {}",
                         t!("info"),
-                        t!("usb_download_cache_found")
+                        t!("bt_download_cache_found")
                     )))
                     .expect("Channel closed");
                 fs::read_to_string(cached_db_path).unwrap()
@@ -148,12 +174,12 @@ pub fn get_usb_profiles_from_url(
                     .send_blocking(ChannelMsg::OutputLine(format!(
                         "[{}] {}",
                         t!("error"),
-                        t!("usb_download_cache_not_found")
+                        t!("bt_download_cache_not_found")
                     )))
                     .expect("Channel closed");
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    t!("usb_download_cache_not_found"),
+                    t!("bt_download_cache_not_found"),
                 ));
             }
         }
@@ -188,45 +214,76 @@ pub fn get_usb_profiles_from_url(
                 .as_str()
                 .unwrap_or(&t!("unknown"))
                 .to_string();
-            let class_codes: Vec<String> = match profile["class_codes"].as_array() {
+            let class_ids: Vec<String> = match profile["class_ids"].as_array() {
                 Some(t) => t
                     .into_iter()
                     .map(|x| x.as_str().unwrap_or_default().to_string())
                     .collect(),
                 None => vec![],
             };
-            let vendor_ids: Vec<String> = match profile["vendor_ids"].as_array() {
+            let bt_names: Vec<String> = match profile["bt_names"].as_array() {
                 Some(t) => t
                     .into_iter()
                     .map(|x| x.as_str().unwrap_or_default().to_string())
                     .collect(),
                 None => vec![],
             };
-            let product_ids: Vec<String> = match profile["product_ids"].as_array() {
+            let modalias_vendor_ids: Vec<String> = match profile["modalias_vendor_ids"].as_array() {
                 Some(t) => t
                     .into_iter()
                     .map(|x| x.as_str().unwrap_or_default().to_string())
                     .collect(),
                 None => vec![],
             };
-            let blacklisted_class_codes: Vec<String> =
-                match profile["blacklisted_class_codes"].as_array() {
+            let modalias_device_ids: Vec<String> = match profile["modalias_device_ids"].as_array() {
+                Some(t) => t
+                    .into_iter()
+                    .map(|x| x.as_str().unwrap_or_default().to_string())
+                    .collect(),
+                None => vec![],
+            };
+            let modalias_product_ids: Vec<String> = match profile["modalias_product_ids"].as_array()
+            {
+                Some(t) => t
+                    .into_iter()
+                    .map(|x| x.as_str().unwrap_or_default().to_string())
+                    .collect(),
+                None => vec![],
+            };
+            let blacklisted_class_ids: Vec<String> =
+                match profile["blacklisted_class_ids"].as_array() {
                     Some(t) => t
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
                         .collect(),
                     None => vec![],
                 };
-            let blacklisted_vendor_ids: Vec<String> =
-                match profile["blacklisted_vendor_ids"].as_array() {
+            let blacklisted_bt_names: Vec<String> = match profile["blacklisted_bt_names"].as_array()
+            {
+                Some(t) => t
+                    .into_iter()
+                    .map(|x| x.as_str().unwrap_or_default().to_string())
+                    .collect(),
+                None => vec![],
+            };
+            let blacklisted_modalias_vendor_ids: Vec<String> =
+                match profile["blacklisted_modalias_vendor_ids"].as_array() {
                     Some(t) => t
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
                         .collect(),
                     None => vec![],
                 };
-            let blacklisted_product_ids: Vec<String> =
-                match profile["blacklisted_product_ids"].as_array() {
+            let blacklisted_modalias_device_ids: Vec<String> =
+                match profile["blacklisted_modalias_device_ids"].as_array() {
+                    Some(t) => t
+                        .into_iter()
+                        .map(|x| x.as_str().unwrap_or_default().to_string())
+                        .collect(),
+                    None => vec![],
+                };
+            let blacklisted_modalias_product_ids: Vec<String> =
+                match profile["blacklisted_modalias_product_ids"].as_array() {
                     Some(t) => t
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
@@ -238,7 +295,7 @@ pub fn get_usb_profiles_from_url(
                 None => Some(
                     profile["packages"]
                         .as_array()
-                        .expect("invalid_usb_profile_class_codes")
+                        .expect("invalid_bt_profile_json")
                         .into_iter()
                         .map(|x| x.as_str().unwrap_or_default().to_string())
                         .collect(),
@@ -269,17 +326,21 @@ pub fn get_usb_profiles_from_url(
             let veiled = profile["veiled"].as_bool().unwrap_or_default();
             let priority = profile["priority"].as_i64().unwrap_or_default();
             // Parse into the Struct
-            let profile_struct = CfhdbUsbProfile {
+            let profile_struct = CfhdbBtProfile {
                 codename,
                 i18n_desc,
                 icon_name,
                 license,
-                class_codes,
-                vendor_ids,
-                product_ids,
-                blacklisted_class_codes,
-                blacklisted_vendor_ids,
-                blacklisted_product_ids,
+                class_ids,
+                bt_names,
+                modalias_vendor_ids,
+                modalias_device_ids,
+                modalias_product_ids,
+                blacklisted_class_ids,
+                blacklisted_bt_names,
+                blacklisted_modalias_vendor_ids,
+                blacklisted_modalias_device_ids,
+                blacklisted_modalias_product_ids,
                 packages,
                 check_script,
                 install_script,

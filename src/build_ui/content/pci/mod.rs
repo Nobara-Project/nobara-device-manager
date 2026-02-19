@@ -455,6 +455,8 @@ fn pci_device_page(
             profile,
             #[strong]
             profiles_rc,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 profile_modify(
                     window.clone(),
@@ -462,6 +464,7 @@ fn pci_device_page(
                     &profile,
                     &profiles_rc,
                     "install",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -474,6 +477,8 @@ fn pci_device_page(
             profile,
             #[strong]
             profiles_rc,
+            #[strong]
+            theme_changed_action,
             move |_| {
                 profile_modify(
                     window.clone(),
@@ -481,6 +486,7 @@ fn pci_device_page(
                     &profile,
                     &profiles_rc,
                     "remove",
+                    &theme_changed_action,
                 );
             }
         ));
@@ -625,6 +631,7 @@ pub fn profile_modify(
     profile: &Arc<PreCheckedPciProfile>,
     all_profiles: &Rc<Vec<Arc<PreCheckedPciProfile>>>,
     opreation: &str,
+    theme_changed_action: &gio::SimpleAction,
 ) {
     let (log_loop_sender, log_loop_receiver) = async_channel::unbounded();
     let log_loop_sender: async_channel::Sender<ChannelMsg> = log_loop_sender.clone();
