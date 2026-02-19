@@ -1,7 +1,7 @@
 [Desktop Entry]
-Name=PikaOS Device Manager
-Exec=pika-device-manager
-Icon=com.github.pikaos-linux.pikadevicemanager
+Name=Nobara Driver Manager
+Exec=nobara-driver-manager
+Icon=com.github.nobara-project.nobaradrivermanager
 Terminal=false
 Type=Application
 Encoding=UTF-8
