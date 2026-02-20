@@ -1,6 +1,6 @@
 use crate::{
     build_ui::{color_badge::ColorBadge, colored_circle::ColoredCircle},
-    cfhdb::dmi::{PreCheckedDmiDevice, PreCheckedDmiProfile},
+    cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile},
     config::distro_package_manager,
     ChannelMsg,
 };
@@ -21,7 +21,7 @@ pub fn create_dmi_class(
     window: &ApplicationWindow,
     info: &PreCheckedDmiInfo,
     theme_changed_action: &gio::SimpleAction,
-    update_info_status_action: &gio::SimpleAction,
+    update_device_status_action: &gio::SimpleAction,
 ) -> (String, ScrolledWindow) {
     // Update all profiles' installation status before creating the UI
     for profile in &info.profiles {
@@ -32,7 +32,7 @@ pub fn create_dmi_class(
         &window,
         &info,
         &theme_changed_action,
-        &update_info_status_action,
+        &update_device_status_action,
     );
 
     let scroll = gtk::ScrolledWindow::builder()
@@ -613,7 +613,7 @@ pub fn profile_modify(
         #[strong]
         all_profiles,
         #[strong]
-        update_device_status_action,
+        update_info_status_action,
         move |choice: glib::GString| {
             match choice.as_str() {
                 "profile_modify_dialog_reboot" => {
@@ -627,7 +627,7 @@ pub fn profile_modify(
                     for a_profile in all_profiles.iter() {
                         a_profile.update_installed();
                     }
-                    update_device_status_action.activate(None);
+                    update_info_status_action.activate(None);
                 }
             }
         }

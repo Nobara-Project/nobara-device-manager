@@ -48,7 +48,9 @@ i18n!("locales", fallback = "en_US");
 
 /// main function
 fn main() {
-    let current_locale = get_locale().unwrap_or_else(|| String::from("en-US")).replace("-", "_");
+    let current_locale = get_locale()
+        .unwrap_or_else(|| String::from("en-US"))
+        .replace("-", "_");
 
     rust_i18n::set_locale(&current_locale);
     let application = adw::Application::new(Some(APP_ID), Default::default());

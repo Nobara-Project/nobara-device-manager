@@ -13,6 +13,7 @@ use crate::cfhdb::bt::{PreCheckedBtDevice, PreCheckedBtProfile};
 use crate::cfhdb::dmi::{PreCheckedDmiInfo, PreCheckedDmiProfile};
 use crate::cfhdb::pci::{PreCheckedPciDevice, PreCheckedPciProfile};
 use crate::cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile};
+use crate::ChannelMsg;
 
 mod all_profile_dialog;
 mod bt;
@@ -29,6 +30,12 @@ use main_content_content::{error_dialog, main_content_content};
 use main_content_sidebar::main_content_sidebar;
 use pci::create_pci_class;
 use usb::create_usb_class;
+use users::get_current_username;
+
+use std::{
+    io::{BufRead, BufReader, Write},
+    os::unix::fs::PermissionsExt,
+};
 
 pub fn main_content(
     window: &adw::ApplicationWindow,
@@ -490,6 +497,66 @@ fn theme_changed_thread(theme_changed_action: &SimpleAction) {
             }
         }
     ));
+}
+
+pub fn exec_duct_with_live_channel_stdout(
+    //sender: async_channel::Sender<String>,
+    sender: &async_channel::Sender<ChannelMsg>,
+    duct_expr: duct::Expression,
+) -> Result<(), std::boxed::Box<dyn std::error::Error + Send + Sync>> {
+    let (pipe_reader, pipe_writer) = os_pipe::pipe()?;
+    let child = duct_expr
+        .stderr_to_stdout()
+        .stdout_file(pipe_writer)
+        .start()?;
+    for line in BufReader::new(pipe_reader).lines() {
+        sender
+            .send_blocking(ChannelMsg::OutputLine(line?))
+            .expect("Channel needs to be opened.")
+    }
+    child.wait()?;
+
+    Ok(())
+}
+
+pub fn run_in_lock_script(log_loop_sender: &async_channel::Sender<ChannelMsg>, script: &str) {
+    let file_path = "/var/cache/cfhdb/script_lock.sh";
+    let file_fs_path = std::path::Path::new(file_path);
+    if file_fs_path.exists() {
+        std::fs::remove_file(file_fs_path).unwrap();
+    }
+    {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(file_path)
+            .expect(&(file_path.to_string() + "cannot be read"));
+        file.write_all(script.as_bytes())
+            .expect(&(file_path.to_string() + "cannot be written to"));
+        let mut perms = file
+            .metadata()
+            .expect(&(file_path.to_string() + "cannot be read"))
+            .permissions();
+        perms.set_mode(0o777);
+        std::fs::set_permissions(file_path, perms)
+            .expect(&(file_path.to_string() + "cannot be written to"));
+    }
+    let final_cmd = if get_current_username().unwrap() == "root" {
+        duct::cmd!(file_path)
+    } else {
+        duct::cmd!("pkexec", file_path)
+    };
+    match exec_duct_with_live_channel_stdout(&log_loop_sender, final_cmd) {
+        Ok(_) => {
+            log_loop_sender
+                .send_blocking(ChannelMsg::SuccessMsg)
+                .unwrap();
+        }
+        Err(_) => {
+            log_loop_sender.send_blocking(ChannelMsg::FailMsg).unwrap();
+        }
+    }
 }
 
 pub fn get_icon_for_class(class: &str) -> Option<&'static str> {

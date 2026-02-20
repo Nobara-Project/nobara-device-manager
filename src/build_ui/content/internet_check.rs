@@ -28,7 +28,8 @@ where
                 String::from("unknown")
             };
 
-            let is_connected = matches!(connectivity_status.as_str(), "full" | "limited" | "portal");
+            let is_connected =
+                matches!(connectivity_status.as_str(), "full" | "limited" | "portal");
 
             if is_connected {
                 sender
