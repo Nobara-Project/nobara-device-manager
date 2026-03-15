@@ -1,6 +1,6 @@
 {
     "application_name": "Gestor de núcleos (kernel) de PikaOS",
-    "developer_name": "Cosmo",
+    "developer_name": "Desarrollador",
     "banner_text_no_internet": "Advertencia: ¡No hay conexión a internet!",
     "error_dialog_ok_label": "Aceptar",
     "pci_devices": "Dispositivos PCI",
