@@ -674,6 +674,7 @@ pub fn profile_modify(
     pikd_dialog_progress_bar.set_center_text(t!("progress_bar_circle_center_text"));
     pikd_dialog_progress_bar.set_fraction_font_size(24);
     pikd_dialog_progress_bar.set_center_text_font_size(8);
+    pikd_dialog_progress_bar.set_line_cap(&gtk::cairo::LineCap::Round.into());
     theme_changed_action.connect_activate(clone!(
         #[strong]
         window,

@@ -537,16 +537,16 @@ fn load_cfhdb(status_sender: async_channel::Sender<ChannelMsg>) {
             .send_blocking(ChannelMsg::SuccessMsgDeviceFetch(
                 match pci_vec {
                     Some(t) => Some(t.lock().unwrap().clone()),
-                    None => None
+                    None => None,
                 },
                 match usb_vec {
                     Some(t) => Some(t.lock().unwrap().clone()),
-                    None => None
+                    None => None,
                 },
                 dmi_info,
                 match bt_vec {
                     Some(t) => Some(t.lock().unwrap().clone()),
-                    None => None
+                    None => None,
                 },
                 pci_profiles,
                 usb_profiles,
