@@ -1,7 +1,7 @@
 use std::{rc::Rc, sync::Arc};
 
 use adw::prelude::*;
-use adw::{Banner, BreakpointCondition};
+use adw::Banner;
 use gio::SimpleAction;
 use gtk::glib::{self, clone};
 use gtk::*;
@@ -42,17 +42,11 @@ pub fn main_content(
     bt_profiles: Vec<Arc<PreCheckedBtProfile>>,
     about_action: &gtk::gio::SimpleAction,
     showallprofiles_action: &gtk::gio::SimpleAction,
-) -> adw::OverlaySplitView {
+) -> (adw::OverlaySplitView, impl Fn(&gdk::Surface)) {
     // Start timing the UI building process
     let ui_start = std::time::Instant::now();
 
     let theme_changed_action = gio::SimpleAction::new("theme_changed", None);
-
-    let window_breakpoint = adw::Breakpoint::new(BreakpointCondition::new_length(
-        adw::BreakpointConditionLengthType::MaxWidth,
-        900.0,
-        adw::LengthUnit::Sp,
-    ));
 
     let main_content_overlay_split_view = adw::OverlaySplitView::builder()
         .sidebar_width_unit(adw::LengthUnit::Sp)
@@ -64,6 +58,8 @@ pub fn main_content(
 
     let window_stack = gtk::Stack::builder()
         .transition_type(StackTransitionType::SlideUpDown)
+        .hexpand(true)
+        .vexpand(true)
         .build();
 
     let all_profiles_button = gtk::Button::builder()
@@ -381,16 +377,17 @@ pub fn main_content(
         None => {}
     }
 
-    main_content_overlay_split_view.set_content(Some(&main_content_content(
+    let (main_content_overlay_split_view_content, breakpoint_closure) = main_content_content(
         &window,
         &window_banner,
         &window_stack,
         &main_content_overlay_split_view,
-        &window_breakpoint,
         all_profiles_button.clone(),
         sidebar_toggle.clone(),
         &about_action,
-    )));
+    );
+
+    main_content_overlay_split_view.set_content(Some(&main_content_overlay_split_view_content));
 
     main_content_overlay_split_view.set_sidebar(Some(&main_content_sidebar(
         &window_stack,
@@ -399,16 +396,6 @@ pub fn main_content(
         &dmi_row,
         &bt_rows,
     )));
-
-    window_breakpoint.add_setter(
-        &main_content_overlay_split_view,
-        "collapsed",
-        Some(&true.to_value()),
-    );
-
-    window_breakpoint.add_setter(&sidebar_toggle, "active", Some(&false.to_value()));
-
-    window.add_breakpoint(window_breakpoint);
 
     let internet_check_closure = clone!(
         #[strong]
@@ -424,7 +411,7 @@ pub fn main_content(
     // Print the time taken to build the UI
     println!("[PERF] Initial UI building took: {:?}", ui_start.elapsed());
 
-    main_content_overlay_split_view
+    (main_content_overlay_split_view, breakpoint_closure)
 }
 
 // Helper function to create a placeholder page with a loading spinner

@@ -117,7 +117,7 @@ pub fn loading_content(
                         dmi_profiles,
                         bt_profiles,
                     ) => {
-                        window.set_content(Some(&main_content(
+                        let (window_content, breakpoint_closure) = main_content(
                             &window,
                             hashmap_pci,
                             hashmap_usb,
@@ -129,7 +129,11 @@ pub fn loading_content(
                             bt_profiles,
                             &about_action,
                             &showallprofiles_action,
-                        )));
+                        );
+                        window.set_content(Some(&window_content));
+                        let window_surface = window.surface().unwrap();
+			            breakpoint_closure(&window_surface);
+			            window_surface.connect_width_notify(breakpoint_closure);
                     }
                     ChannelMsg::FailMsg => {}
                     ChannelMsg::SuccessMsg | ChannelMsg::UpdateMsg => {

@@ -1,5 +1,5 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{glib::clone, Button, Stack, ToggleButton};
+use gtk::{Button, Stack, ToggleButton, gdk, glib::clone};
 
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 
@@ -8,11 +8,10 @@ pub fn main_content_content(
     window_banner: &adw::Banner,
     stack: &Stack,
     main_content_overlay_split_view: &adw::OverlaySplitView,
-    window_breakpoint: &adw::Breakpoint,
     all_profiles_button: Button,
     sidebar_toggle_button: ToggleButton,
     about_action: &gtk::gio::SimpleAction,
-) -> adw::ToolbarView {
+) -> (adw::ToolbarView, impl Fn(&gdk::Surface)) {
     let window_headerbar = HeaderBar::builder()
         .title_widget(&WindowTitle::builder().title(t!("application_name")).build())
         .show_title(false)
@@ -21,6 +20,8 @@ pub fn main_content_content(
         .content(stack)
         .top_bar_style(ToolbarStyle::Flat)
         .bottom_bar_style(ToolbarStyle::Flat)
+        .hexpand(true)
+        .vexpand(true)
         .build();
 
     // Use the provided sidebar toggle button
@@ -33,12 +34,25 @@ pub fn main_content_content(
     window_headerbar.pack_end(&all_profiles_button);
     window_toolbar.add_top_bar(&window_headerbar);
     window_toolbar.add_top_bar(&window_banner.clone());
-    window_breakpoint.add_setter(&sidebar_toggle_button, "visible", Some(&true.to_value()));
-    window_breakpoint.add_setter(&window_headerbar, "show_title", Some(&true.to_value()));
+    let breakpoint_closure = clone!(
+        #[strong]
+        main_content_overlay_split_view,
+        #[strong]
+        sidebar_toggle_button,
+        #[strong]
+        window_headerbar,
+        move |surface: &gdk::Surface| {
+            let is_small = surface.width() < 1400;
+            main_content_overlay_split_view.set_collapsed(is_small);
+            sidebar_toggle_button.set_visible(is_small);
+            window_headerbar.set_show_title(is_small);
+        }
+    );
+
     window_headerbar.pack_end(&sidebar_toggle_button);
     credits_window(&window, &window_headerbar, &about_action);
 
-    window_toolbar
+    (window_toolbar, breakpoint_closure)
 }
 
 fn credits_window(
