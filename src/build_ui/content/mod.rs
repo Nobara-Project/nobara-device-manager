@@ -30,6 +30,20 @@ use main_content_sidebar::main_content_sidebar;
 use pci::create_pci_class;
 use usb::create_usb_class;
 
+pub const DUCT_INHIBIT_START_CMD: &str = r###"
+			#! /bin/bash
+			set -e
+			rm -rf /tmp/pika-device-manager-inhibit.pid
+			systemd-inhibit --who="$0" --what="sleep:shutdown" --why "$1" sleep inf &
+			echo "$!" > /tmp/pika-device-manager-inhibit.pid
+			"###;
+
+pub const DUCT_INHIBIT_END_CMD: &str = r###"
+			#! /bin/bash
+			set -e
+			kill $(cat /tmp/pika-device-manager-inhibit.pid)
+			"###;
+
 pub fn main_content(
     window: &adw::ApplicationWindow,
     hashmap_pci: Option<Vec<(String, Vec<PreCheckedPciDevice>)>>,

@@ -1,6 +1,9 @@
 use crate::{
     build_ui::{
-        color_badge::ColorBadge, colored_circle::ColoredCircle, get_current_font, wrap_text,
+        color_badge::ColorBadge,
+        colored_circle::ColoredCircle,
+        content::{DUCT_INHIBIT_END_CMD, DUCT_INHIBIT_START_CMD},
+        get_current_font, wrap_text,
     },
     cfhdb::usb::{PreCheckedUsbDevice, PreCheckedUsbProfile},
 };
@@ -779,6 +782,7 @@ pub fn profile_modify(
             while let Ok(state) = process_log_receiver.recv().await {
                 match state {
                     PikChannel::Status(status) => {
+                        let _ = duct::cmd!("bash", "-c", DUCT_INHIBIT_END_CMD).start();
                         if status {
                             pikd_dialog_child_box.set_visible(false);
                             pikd_log_image.set_icon_name(Some("face-cool-symbolic"));
@@ -878,6 +882,14 @@ pub fn profile_modify(
         #[strong]
         log_file_path,
         move || {
+            let _ = duct::cmd!(
+                "bash",
+                "-c",
+                DUCT_INHIBIT_START_CMD,
+                &t!("application_name").to_string(),
+                &t!("profile_install_dialog_heading").to_string()
+            )
+            .start();
             //
             let process_log_sender_clone0 = process_log_sender.clone();
             let process_log_sender_clone1 = process_log_sender.clone();

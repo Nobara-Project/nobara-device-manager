@@ -1,5 +1,5 @@
 use adw::{prelude::*, HeaderBar, ToolbarStyle, ToolbarView, WindowTitle};
-use gtk::{Button, Stack, ToggleButton, gdk, glib::clone};
+use gtk::{gdk, glib::clone, Button, Stack, ToggleButton};
 
 use crate::config::{APP_GIT, APP_ICON, VERSION};
 
