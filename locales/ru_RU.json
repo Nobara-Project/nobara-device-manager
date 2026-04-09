@@ -1,7 +1,7 @@
 {
-    "application_name": "Диспетчер Устройств PikaOS",
+    "application_name": "Менеджер Ядер PikaOS",
     "developer_name": "Cosmo",
-    "banner_text_no_internet": "Отсутствует подключение к интернету!",
+    "banner_text_no_internet": "Ошибка: Нет Доступа к Сети!",
     "error_dialog_ok_label": "ОК",
     "pci_devices": "PCI Устройства",
     "usb_devices": "USB Устройства",
