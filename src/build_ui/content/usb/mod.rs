@@ -140,18 +140,6 @@ fn usb_device_page(
         .build();
 
     //
-    let device_controls_box = gtk::Box::builder()
-        .orientation(Orientation::Horizontal)
-        .valign(Align::Start)
-        .halign(Align::Center)
-        .margin_start(10)
-        .margin_end(10)
-        .margin_bottom(20)
-        .margin_top(20)
-        .build();
-    device_controls_box.add_css_class("linked");
-
-    //
     let color_badges_size_group0 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
     let color_badges_size_group1 = gtk::SizeGroup::new(gtk::SizeGroupMode::Both);
 
@@ -246,51 +234,6 @@ fn usb_device_page(
     }
     //
 
-    let control_button_start_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-start-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_start"))
-        .build();
-    let control_button_stop_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("media-playback-stop-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_stop"))
-        .build();
-    let control_button_enable_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("emblem-ok-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_enable"))
-        .build();
-    let control_button_disable_device_button = gtk::Button::builder()
-        .child(
-            &gtk::Image::builder()
-                .icon_name("edit-clear-all-symbolic")
-                .pixel_size(32)
-                .build(),
-        )
-        .width_request(48)
-        .height_request(48)
-        .tooltip_text(t!("device_control_disable"))
-        .build();
-
     let available_profiles_list_row = adw::PreferencesGroup::builder()
         .margin_top(20)
         .margin_bottom(20)
@@ -307,66 +250,6 @@ fn usb_device_page(
 
     let mut profiles = device.profiles.clone();
     profiles.sort_by_key(|x| x.profile().priority);
-
-    control_button_start_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.start_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_start_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_enable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.enable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_enable_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_stop_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.stop_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_stop_error"), &e.to_string()),
-            }
-        }
-    ));
-
-    control_button_disable_device_button.connect_clicked(clone!(
-        #[strong]
-        device_content,
-        #[strong]
-        window,
-        #[strong]
-        update_device_status_action,
-        move |_| {
-            match device_content.disable_device() {
-                Ok(_) => update_device_status_action.activate(None),
-                Err(e) => error_dialog(window.clone(), &t!("device_disable_error"), &e.to_string()),
-            }
-        }
-    ));
 
     let mut normal_profiles = vec![];
     let mut veiled_profiles = vec![];
@@ -513,14 +396,6 @@ fn usb_device_page(
         device_content,
         #[strong]
         device_status_indicator,
-        #[strong]
-        control_button_start_device_button,
-        #[strong]
-        control_button_stop_device_button,
-        #[strong]
-        control_button_enable_device_button,
-        #[strong]
-        control_button_disable_device_button,
         move |_, _| {
             let updated_device =
                 CfhdbUsbDevice::get_device_from_busid(&device_content.sysfs_busid).unwrap();
@@ -539,12 +414,6 @@ fn usb_device_page(
             };
             device_status_indicator.set_color(color);
             device_status_indicator.set_tooltip_text(Some(tooltip));
-
-            control_button_start_device_button.set_sensitive(!started);
-            control_button_stop_device_button.set_sensitive(started);
-
-            control_button_enable_device_button.set_sensitive(!enabled);
-            control_button_disable_device_button.set_sensitive(enabled);
 
             let device_started_i18n = if started {
                 &t!("status_yes")
@@ -581,16 +450,7 @@ fn usb_device_page(
 
     update_device_status_action.activate(None);
 
-    device_controls_box.append(&control_button_start_device_button);
-
-    device_controls_box.append(&control_button_stop_device_button);
-
-    device_controls_box.append(&control_button_enable_device_button);
-
-    device_controls_box.append(&control_button_disable_device_button);
-
     content_box.append(&color_badges_grid);
-    content_box.append(&device_controls_box);
     for widget in normal_profiles {
         available_profiles_list_row.add(&widget);
     }
